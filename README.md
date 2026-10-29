@@ -35,18 +35,26 @@ Mỗi bảng tính có **hệ số an toàn k** chọn nhanh (1 · 1,1 · 1,15 �
 2. Mục *Build and deployment*: Source = **Deploy from a branch**, chọn nhánh chứa code và thư mục `/ (root)`, bấm **Save**.
 3. Sau 1–2 phút trang có địa chỉ dạng `https://<tên-tài-khoản>.github.io/tool-t-nh-to-n/`.
 
+## Giao diện
+
+Theo bản thiết kế 01 đã chốt (`thiet-ke/chot-giao-dien.md`): nền trắng, vàng ấm `#F5C400` làm màu chủ đạo, xanh than `#172B3A` cho chữ và biểu tượng, font Be Vietnam Pro nhúng sẵn (chạy được khi mất mạng). Điện thoại có nút ba gạch bên trái, menu danh mục trượt từ trái và thanh điều hướng dưới; máy tính có thanh danh mục bên trái.
+
 ## Cấu trúc
 
 ```
-index.html       khung trang
-css/style.css    giao diện vàng – đen
-js/core.js       lõi: form, hệ số an toàn, hiển thị kết quả, dãy tiêu chuẩn
-js/m-dien.js     nhóm Điện động lực (Đ-01 … Đ-06)
-js/m-tram.js     nhóm Trạm & nguồn (T-01 … T-06)
-js/m-co.js       nhóm Cơ – nhiệt – tiện ích (C-01 … C-08)
+index.html             khung trang
+manifest.webmanifest   cấu hình chạy như app khi thêm vào màn hình chính
+css/style.css          giao diện
+fonts/                 Be Vietnam Pro (giấy phép SIL OFL 1.1 trong OFL.txt)
+icons/                 biểu tượng app
+js/core.js             lõi: điều hướng, form, hệ số an toàn, hiển thị kết quả, dãy tiêu chuẩn
+js/m-dien.js           nhóm Điện động lực (Đ-01 … Đ-06)
+js/m-tram.js           nhóm Trạm & nguồn (T-01 … T-06)
+js/m-co.js             nhóm Cơ – nhiệt – tiện ích (C-01 … C-08)
+thiet-ke/              bản chốt giao diện để đối chiếu
 ```
 
-Thêm bảng tính mới: gọi `CD.register({...})` với danh sách `inputs` và hàm `calc(v, k, U)` trả về `tiles`, `checks`, `steps`, `notes`.
+Thêm bảng tính mới: gọi `CD.register({...})` với `id`, `group`, `code`, `title`, `short` (mô tả một dòng trên thẻ), `desc`, danh sách `inputs` và hàm `calc(v, k, U)` trả về `tiles`, `checks` (`[trạng thái, tiêu đề, chi tiết]`), `steps`, `notes`.
 
 ## Lưu ý
 

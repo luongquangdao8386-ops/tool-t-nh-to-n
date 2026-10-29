@@ -67,7 +67,7 @@
 
   // ================= Đ-01 Tính dòng điện =================
   CD.register({
-    id: 'dong-dien', group: 'dien', code: 'Đ-01', title: 'Tính dòng điện',
+    id: 'dong-dien', group: 'dien', code: 'Đ-01', title: 'Tính dòng điện', short: 'Dòng tải từ kW, kVA hoặc HP.',
     desc: 'Dòng làm việc từ kW, kVA hoặc HP; công suất S, P, Q và dòng thiết kế có hệ số an toàn.',
     sf: 1.25, sfNote: 'Dòng thiết kế Itk = Ib × k – dùng để chọn aptomat, cáp, thanh cái.',
     inputs: [
@@ -121,7 +121,7 @@
 
   // ================= Đ-02 Tiết diện dây & sụt áp =================
   CD.register({
-    id: 'tiet-dien-day', group: 'dien', code: 'Đ-02', title: 'Tiết diện dây & sụt áp',
+    id: 'tiet-dien-day', group: 'dien', code: 'Đ-02', title: 'Tiết diện dây & sụt áp', short: 'Chọn cáp, kiểm tra tải và sụt áp.',
     desc: 'Chọn tiết diện cáp theo dòng cho phép (có hiệu chỉnh nhiệt độ, số mạch đi chung), sụt áp và ổn định nhiệt ngắn mạch.',
     sf: 1.25, sfNote: 'Dòng thiết kế Itk = Ib × k được dùng cho cả điều kiện phát nóng và sụt áp.',
     inputs: [
@@ -186,11 +186,20 @@
       const pe = peSize(S * np);
       const In = U.pick(U.STD.breaker, Itk);
       const gov = i > iVd ? 'ổn định nhiệt ngắn mạch' : i > iHeat ? 'sụt áp' : 'phát nóng (dòng cho phép)';
-      checks.push([IzTot >= Itk ? 'ok' : 'bad', `Dòng cho phép sau hiệu chỉnh Iz = ${f(IzTot, 1)} A ≥ Itk = ${f(Itk, 1)} A`]);
-      checks.push([d.pct <= v.du ? 'ok' : 'bad', `Sụt áp ΔU = ${f(d.pct, 2)} % ${d.pct <= v.du ? '≤' : '>'} ${f(v.du)} % cho phép`]);
-      if (v.ik > 0) checks.push([S * np >= sMin ? 'ok' : 'bad', `Ổn định nhiệt: S = ${f(S * np)} mm² ≥ Smin = ${f(sMin, 1)} mm²`]);
-      if (In) checks.push([In <= IzTot ? 'ok' : 'warn', `Phối hợp aptomat: Ib ≤ In = ${In} A ≤ Iz = ${f(IzTot, 0)} A`]);
-      if (v.mat === 'Al') checks.push(['warn', 'Cáp nhôm: dùng đầu cốt đồng–nhôm (bimetal), siết lực đúng mô-men.']);
+      const izAt = (idx) => izBase(idx, v.mat, v.ins, v.met, v.pha) * kt * kg * np;
+      checks.push([IzTot < Itk ? 'bad' : In && In > IzTot ? 'warn' : 'ok', 'Khả năng tải & bảo vệ',
+        In ? `Itk = ${f(Itk, 0)} A ≤ In = ${In} A ${In <= IzTot ? '≤' : '>'} Iz = ${f(IzTot, 0)} A` : `Iz = ${f(IzTot, 0)} A ≥ Itk = ${f(Itk, 0)} A`]);
+      checks.push([d.pct <= v.du ? 'ok' : 'bad', 'Sụt áp trên tuyến', `${f(d.pct, 2)} % ${d.pct <= v.du ? '≤' : '>'} giới hạn ${f(v.du)} %`]);
+      if (v.ik > 0) checks.push([S * np >= sMin ? 'ok' : 'bad', 'Ổn định nhiệt ngắn mạch', `S = ${f(S * np)} mm² ≥ Smin = ${f(sMin, 1)} mm² (${f(v.ik)} kA, ${f(v.tk)} s)`]);
+      checks.push(['warn', 'Điều kiện lắp thực tế', `Đã tính ở ${f(ta)} °C, ${Math.round(v.n)} mạch đi chung, kiểu ${v.met}. Kiểm tra lại tại hiện trường.`]);
+      if (i > i0) {
+        const j = i - 1, dj = du(j), izj = izAt(j);
+        const why = izj < Itk ? `Iz = ${f(izj, 0)} A < Itk = ${f(Itk, 0)} A`
+          : dj.pct > v.du ? `sụt áp ${f(dj.pct, 2)} % > ${f(v.du)} %`
+            : `S = ${f(SIZES[j] * np)} mm² < Smin = ${f(sMin, 1)} mm²`;
+        checks.push(['bad', `Phương án nhỏ hơn: ${np > 1 ? np + ' × ' : ''}${f(SIZES[j])} mm²`, `Không dùng được vì ${why}.`]);
+      }
+      if (v.mat === 'Al') checks.push(['warn', 'Cáp nhôm', 'Dùng đầu cốt đồng–nhôm (bimetal), siết lực đúng mô-men.']);
       return {
         tiles: [
           { l: 'Tiết diện ruột pha', v: np > 1 ? `${np} × ${f(S)}` : f(S), u: 'mm²', main: true, s: `${v.mat}/${v.ins} · quyết định bởi: ${gov}` },
@@ -231,7 +240,7 @@
     T: ['D', 'Đường cong D / MCCB chỉnh Im cao (dòng xung kích MBA, tụ bù)']
   };
   CD.register({
-    id: 'aptomat', group: 'dien', code: 'Đ-03', title: 'Chọn aptomat',
+    id: 'aptomat', group: 'dien', code: 'Đ-03', title: 'Chọn aptomat', short: 'Chọn In, loại, đường cong và Icu.',
     desc: 'Chọn dòng định mức In, loại MCB/MCCB/ACB, đường cong cắt, khả năng cắt Icu và phối hợp với cáp.',
     sf: 1.25, sfNote: 'In ≥ Ib × k; Icu ≥ Ik tại điểm lắp đặt.',
     inputs: [
@@ -292,7 +301,7 @@
 
   // ================= Đ-04 Dòng ngắn mạch =================
   CD.register({
-    id: 'ngan-mach', group: 'dien', code: 'Đ-04', title: 'Dòng ngắn mạch hạ thế', suggest: true,
+    id: 'ngan-mach', group: 'dien', code: 'Đ-04', title: 'Dòng ngắn mạch hạ thế', short: 'Ik3 tại tủ tổng và cuối tuyến cáp.', suggest: true,
     desc: 'Ngắn mạch 3 pha tại đầu cực MBA và cuối tuyến cáp (IEC 60909 rút gọn) để chọn Icu, Icm của aptomat.',
     sf: 1.1, sfNote: 'Icu yêu cầu = Ik × k; dòng ngắn mạch bản thân không nhân k.',
     inputs: [
@@ -367,7 +376,7 @@
   };
   const CONTACTOR = [9, 12, 18, 25, 32, 40, 50, 65, 80, 95, 115, 150, 185, 225, 265, 330, 400, 500, 630, 780];
   CD.register({
-    id: 'dong-co', group: 'dien', code: 'Đ-05', title: 'Động cơ & khởi động', suggest: true,
+    id: 'dong-co', group: 'dien', code: 'Đ-05', title: 'Động cơ & khởi động', short: 'Dòng khởi động, contactor, rơ le nhiệt.', suggest: true,
     desc: 'Dòng định mức, dòng khởi động, chọn aptomat, contactor, rơ le nhiệt, cáp theo phương pháp khởi động.',
     sf: 1.2, sfNote: 'Thiết bị đóng cắt và cáp chọn theo In × k.',
     inputs: [
@@ -428,7 +437,7 @@
   // ================= Đ-06 Tụ bù =================
   const STEP = [5, 10, 12.5, 15, 20, 25, 30, 40, 50, 60, 75, 100];
   CD.register({
-    id: 'tu-bu', group: 'dien', code: 'Đ-06', title: 'Tụ bù công suất phản kháng', suggest: true,
+    id: 'tu-bu', group: 'dien', code: 'Đ-06', title: 'Tụ bù công suất phản kháng', short: 'Dung lượng tụ bù theo cosφ.', suggest: true,
     desc: 'Dung lượng tụ bù nâng cosφ, số cấp, dòng tụ, aptomat, cáp và khuyến nghị cuộn kháng khi có nhiều biến tần.',
     sf: 1.1, sfNote: 'Qtk = Qc × k (dự phòng tụ suy giảm dung lượng theo thời gian).',
     inputs: [

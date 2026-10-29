@@ -37,7 +37,7 @@
 
   // ================= T-01 Máy biến áp =================
   CD.register({
-    id: 'may-bien-ap', group: 'tram', code: 'T-01', title: 'Chọn máy biến áp',
+    id: 'may-bien-ap', group: 'tram', code: 'T-01', title: 'Chọn máy biến áp', short: 'Chọn dung lượng, 1 hoặc 2 máy.',
     desc: 'Công suất tính toán theo hệ số đồng thời, dự phòng phát triển, phương án 1 hoặc 2 máy, dòng định mức và dòng ngắn mạch phía hạ thế.',
     sf: 1.1, sfNote: 'Stk = Stt × (1 + dự phòng) × k.',
     inputs: [
@@ -102,7 +102,7 @@
   const MV_CT = [5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100, 150, 200, 300, 400, 600, 800, 1000, 1200];
   const MV_CABLE = [[25, 130], [35, 150], [50, 175], [70, 215], [95, 255], [120, 290], [150, 325], [185, 365], [240, 420], [300, 470], [400, 530]];
   CD.register({
-    id: 'tu-trung-the', group: 'tram', code: 'T-02', title: 'Tủ trung thế',
+    id: 'tu-trung-the', group: 'tram', code: 'T-02', title: 'Tủ trung thế', short: 'Thanh cái, cầu chì / VCB, CT, cáp.',
     desc: 'Dòng định mức thanh cái và máy cắt, dòng chịu ngắn mạch, cầu chì bảo vệ MBA, tỉ số CT, tiết diện cáp trung thế.',
     sf: 1.25, sfNote: 'Dòng thiết kế thanh cái, CT và cáp = I × k.',
     inputs: [
@@ -160,7 +160,7 @@
 
   // ================= T-03 Tủ hạ thế tổng (MSB) =================
   CD.register({
-    id: 'tu-ha-the', group: 'tram', code: 'T-03', title: 'Tủ hạ thế tổng (MSB)',
+    id: 'tu-ha-the', group: 'tram', code: 'T-03', title: 'Tủ hạ thế tổng (MSB)', short: 'ACB tổng, CT, thanh cái, ATS.',
     desc: 'Aptomat tổng ACB, khả năng cắt, CT đo lường, thanh cái pha/N/PE, ATS máy phát và dung lượng tụ bù sơ bộ.',
     sf: 1.25, sfNote: 'ACB, CT, thanh cái chọn theo I × k; Icu ≥ Ik × k.',
     inputs: [
@@ -222,7 +222,7 @@
 
   // ================= T-04 Thanh cái =================
   CD.register({
-    id: 'thanh-cai', group: 'tram', code: 'T-04', title: 'Thanh cái hạ thế',
+    id: 'thanh-cai', group: 'tram', code: 'T-04', title: 'Thanh cái hạ thế', short: 'Kích thước thanh cái, ổn định nhiệt.',
     desc: 'Chọn kích thước thanh cái đồng/nhôm theo DIN 43671, hiệu chỉnh nhiệt độ, kiểm tra ổn định nhiệt và lực điện động khi ngắn mạch.',
     sf: 1.25, sfNote: 'Dòng yêu cầu thanh cái = I × k.',
     inputs: [
@@ -289,7 +289,7 @@
   // ================= T-05 Máy phát điện =================
   const GEN_START = { dol: ['Trực tiếp (DOL)', 7], yd: ['Sao – tam giác', 2.3], soft: ['Khởi động mềm', 3.5], vfd: ['Biến tần', 1.5] };
   CD.register({
-    id: 'may-phat', group: 'tram', code: 'T-05', title: 'Máy phát điện dự phòng',
+    id: 'may-phat', group: 'tram', code: 'T-05', title: 'Máy phát điện dự phòng', short: 'Công suất, khởi động động cơ, dầu.',
     desc: 'Công suất máy phát theo tải ưu tiên và khởi động động cơ lớn nhất, tiêu hao nhiên liệu, bồn dầu, aptomat và ATS.',
     sf: 1.2, sfNote: 'Công suất yêu cầu × k trước khi chọn theo dãy máy phát.',
     inputs: [
@@ -370,7 +370,7 @@
     return lo === hi ? a : a + (b - a) * (r - lo);
   }
   CD.register({
-    id: 'tiep-dia', group: 'tram', code: 'T-06', title: 'Hệ thống tiếp địa', suggest: true,
+    id: 'tiep-dia', group: 'tram', code: 'T-06', title: 'Hệ thống tiếp địa', short: 'Điện trở cọc và số cọc cần thiết.', suggest: true,
     desc: 'Điện trở một cọc, số cọc cần thiết theo hệ số sử dụng, so với điện trở yêu cầu của trạm, chống sét hoặc thiết bị điện tử.',
     sf: 1.2, sfNote: 'Điện trở mục tiêu = R yêu cầu / k (khắt khe hơn khi k lớn).',
     inputs: [

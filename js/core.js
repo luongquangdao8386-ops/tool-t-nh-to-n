@@ -1,4 +1,4 @@
-/* Lõi công cụ: đăng ký module, dựng form, hệ số an toàn, hiển thị kết quả. */
+/* Lõi công cụ: đăng ký module, điều hướng, dựng giao diện, hệ số an toàn, hiển thị kết quả. */
 (function () {
   'use strict';
 
@@ -59,16 +59,19 @@
     }
   };
 
-  // ---------- Đăng ký module ----------
+  // ---------- Nhóm & module ----------
   const GROUPS = [
-    { id: 'dien', name: 'Điện động lực', sub: 'Dòng, dây, aptomat, ngắn mạch, động cơ, tụ bù' },
-    { id: 'tram', name: 'Trạm & nguồn', sub: 'MBA, tủ trung thế, tủ hạ thế, thanh cái, máy phát, tiếp địa' },
-    { id: 'co', name: 'Cơ – nhiệt – tiện ích', sub: 'Chiller, điều hoà, khí nén, khí thải, bơm, hơi, chiếu sáng' }
+    { id: 'dien', name: 'Điện động lực', icon: 'bolt', sub: 'cable' },
+    { id: 'tram', name: 'Trạm & nguồn', icon: 'source', sub: 'bolt' },
+    { id: 'co', name: 'Cơ – nhiệt – tiện ích', icon: 'gear', sub: 'gear' }
   ];
   const MODS = [];
   const SF_PRESETS = [1, 1.1, 1.15, 1.2, 1.25, 1.3, 1.5];
+  const groupOf = (m) => GROUPS.find((g) => g.id === m.group);
+  const modsOf = (g) => MODS.filter((m) => m.group === g.id);
+  const pad2 = (n) => String(n).padStart(2, '0');
 
-  // ---------- Lưu trạng thái trên trình duyệt ----------
+  // ---------- Lưu trạng thái trên máy ----------
   const KEY = 'codien-calc.v1';
   let store = {};
   try { store = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { store = {}; }
@@ -89,102 +92,180 @@
   }
   const visible = (inp, v) => !inp.show || inp.show(v);
   const optsOf = (inp, v) => (typeof inp.opts === 'function' ? inp.opts(v) : inp.opts);
+  const lastMod = () => MODS.find((m) => m.id === store.$last) || null;
+
+  // ---------- Biểu tượng (nét 1,7 px, theo bản thiết kế) ----------
+  const P = {
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    bolt: '<path d="m13 2-9 12h7l-1 8 10-13h-7l1-7Z"/>',
+    source: '<rect x="4" y="6" width="16" height="15" rx="2"/><path d="M8 6V3m8 3V3M8 10h3m2 0h3M8 14h3m2 0h3m-4 3v4"/>',
+    gear: '<path d="m9 3 1-1h4l1 3 3 1 3 1v4l-2 2-1 3v3l-4 2-3-1-3-1H5l-2-4 1-3 1-3V6l4-3Z"/><circle cx="12" cy="12" r="3.5"/>',
+    search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
+    arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
+    left: '<path d="M19 12H5m5-5-5 5 5 5"/>',
+    chevron: '<path d="m9 5 7 7-7 7"/>',
+    down: '<path d="m6 9 6 6 6-6"/>',
+    menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+    list: '<path d="M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1"/>',
+    close: '<path d="m6 6 12 12M6 18 18 6"/>',
+    calc: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 11h1m6 0h1m-8 4h1m6 0h1m-8 4h1m6 0h1"/>',
+    factory: '<path d="M3 21V10l6 3V9l6 4V3h4v18H3Z"/><path d="M6 17h1m3 0h1m3 0h1"/>',
+    sliders: '<path d="M4 7h8m4 0h4M4 17h3m4 0h9"/><circle cx="14" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+    circlecheck: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+    warn: '<path d="m10.3 3.5-8 14A2 2 0 0 0 4 20h16a2 2 0 0 0 1.7-2.5l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 8v5m0 3v.1"/>',
+    fail: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m-6 0 6-6"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/>',
+    shield: '<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/>',
+    copy: '<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4"/>',
+    reset: '<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/>',
+    formula: '<path d="M18 4H8l6 8-6 8h10M4 4v16"/>',
+    cable: '<path d="M3 17h7a5 5 0 0 0 0-10H7m0-3v6m-3-6v6m0-6h3m-1 6v3M14 4h7m-7 4h5m-2 7h4m-4 4h4"/>'
+  };
+  const icon = (n) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${P[n] || P.calc}</svg>`;
+  const MARK = '<span class="brandmark"><svg viewBox="0 0 36 36" fill="none" aria-hidden="true"><path d="M7 12.5 18 6l11 6.5V24L18 30 7 24V12.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m7 12.5 11 6 11-6M18 18.5V30" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m19.5 8-6 9h5l-2 8 8-11h-5l.5-6Z" fill="currentColor" stroke="#F5C400" stroke-width="1.2" stroke-linejoin="round"/></svg></span>';
+  const BRAND = `<a class="brand" href="#tong-quan" aria-label="Tính toán cơ điện — Trang tổng quan">${MARK}<span><span class="brand-name">Tính toán cơ điện</span><span class="brand-subtitle">NHÀ MÁY GIẤY BAO BÌ</span></span></a>`;
+  const PAPER = '<svg class="paper-icon" viewBox="0 0 170 90" fill="none" aria-hidden="true"><path d="M14 63h139M28 56V31l32 14V27l32 15V17h25v39M100 18V8h8v10M40 51h7m18 0h7m18 0h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="m22 76 63 7 64-7m-127-7 63 7 64-7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="133" cy="47" r="16" fill="white" stroke="currentColor" stroke-width="1.4"/><circle cx="133" cy="47" r="8" stroke="currentColor" stroke-width="1.4"/><circle cx="133" cy="47" r="2" fill="currentColor"/></svg>';
+  const CABLE_DRAWING = '<svg class="cable-drawing" viewBox="0 0 100 100" fill="none" aria-hidden="true"><path d="m52 21 27 15c10 6 16 18 13 30-4 15-23 23-36 15L29 66" stroke="currentColor" stroke-width="1.2"/><ellipse cx="40" cy="45" rx="26" ry="28" transform="rotate(-28 40 45)" stroke="currentColor" stroke-width="1.5"/><ellipse cx="40" cy="45" rx="21" ry="23" transform="rotate(-28 40 45)" stroke="currentColor" stroke-width="1"/><ellipse cx="39" cy="34" rx="7" ry="8" transform="rotate(-28 39 34)" stroke="currentColor" stroke-width="1.2"/><ellipse cx="30" cy="49" rx="7" ry="8" transform="rotate(-28 30 49)" stroke="currentColor" stroke-width="1.2"/><ellipse cx="49" cy="51" rx="7" ry="8" transform="rotate(-28 49 51)" stroke="currentColor" stroke-width="1.2"/><path d="m57 31 26 15M62 52l28 16M45 70l24 14" stroke="currentColor" stroke-width="1"/></svg>';
 
   // ---------- DOM ----------
   const $ = (s, el = document) => el.querySelector(s);
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const normalize = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+  const fmtK = (k) => U.f(k, 3);
+  let view = 'home';
+  let current = null;
 
-  function renderNav(activeId) {
-    const nav = $('#side');
-    let h = `<a class="nav-link nav-home${!activeId ? ' on' : ''}" href="#tong-quan"><span class="nav-code">00</span><span>Tổng quan</span><span></span></a>`;
-    for (const g of GROUPS) {
-      h += `<div class="nav-group"><h3>${esc(g.name)}</h3>`;
-      for (const m of MODS.filter((x) => x.group === g.id)) {
-        h += `<a class="nav-link${m.id === activeId ? ' on' : ''}" href="#${m.id}"><span class="nav-code">${esc(m.code)}</span><span>${esc(m.title)}</span>${m.suggest ? '<span class="tag-sug">Gợi ý</span>' : '<span></span>'}</a>`;
-      }
-      h += '</div>';
-    }
-    nav.innerHTML = h;
+  // ---------- Khung chung ----------
+  function header() {
+    return `<header class="topbar"><div class="top-inner">
+      <button type="button" class="icon-button mobile-menu" data-menu aria-label="Mở menu danh mục" aria-expanded="false">${icon('menu')}</button>
+      ${BRAND}
+      <nav class="top-nav" aria-label="Điều hướng chính"><a class="top-link ${view === 'home' ? 'active' : ''}" href="#tong-quan">${icon('grid')}Tổng quan</a><button type="button" class="top-link" data-menu>${icon('list')}Danh mục</button></nav>
+      <div class="top-meta"><span class="factory-tag">${icon('factory')}Công cụ kỹ thuật nhà máy</span><span class="pill-badge"><i class="pill-dot"></i>${MODS.length} bảng tính</span></div>
+    </div></header>`;
   }
 
-  function renderHome() {
-    let h = `<section class="hero"><div class="hero-in">
-      <div class="eyebrow">Nhà máy giấy bao bì · Phòng cơ điện</div>
-      <h1>Bộ tính toán cơ điện</h1>
-      <p>${MODS.length} bảng tính cho hệ thống điện, trạm, nguồn dự phòng và tiện ích nhà xưởng. Mỗi bảng tính có hệ số an toàn k chọn được (1 · 1,1 · 1,15 · 1,2 · 1,25 · 1,3 · 1,5 hoặc tự nhập), kết quả chọn thiết bị theo dãy tiêu chuẩn, kèm diễn giải công thức để kiểm tra lại.</p>
-      <div class="legend"><span><span class="pill ok">Đạt</span> thỏa điều kiện</span><span><span class="pill warn">Lưu ý</span> cần xem lại</span><span><span class="pill bad">Không đạt</span> phải đổi thông số</span><span><span class="tag-sug">Gợi ý</span> bảng tính đề xuất thêm</span></div>
-    </div></section>`;
-    for (const g of GROUPS) {
-      h += `<section class="home-group"><h2>${esc(g.name)} <small>${esc(g.sub)}</small></h2><div class="cards">`;
-      for (const m of MODS.filter((x) => x.group === g.id)) {
-        h += `<a class="card" href="#${m.id}"><div class="card-top"><span class="card-code">${esc(m.code)}</span>${m.suggest ? '<span class="tag-sug">Gợi ý</span>' : ''}</div><div class="card-title">${esc(m.title)}</div><div class="card-desc">${esc(m.desc)}</div></a>`;
-      }
-      h += '</div></section>';
-    }
-    h += footer();
-    $('#view').innerHTML = `<div class="wrap">${h}</div>`;
+  function sidebar() {
+    const cg = current ? current.group : null;
+    return `<aside class="sidebar" aria-label="Nhóm bảng tính"><p class="side-eyebrow">KHÔNG GIAN KỸ THUẬT</p>
+      <a href="#tong-quan" class="side-link ${view === 'home' ? 'active' : ''}">${icon('grid')}Tổng quan</a>
+      <div class="side-separator"></div><p class="side-caption">DANH MỤC BẢNG TÍNH</p>
+      ${GROUPS.map((g) => `<a class="side-link ${view === 'calc' && g.id === cg ? 'active' : ''}" href="#nhom-${g.id}">${icon(g.icon)}${esc(g.name)}<span class="count">${pad2(modsOf(g).length)}</span></a>`).join('')}
+      ${view === 'calc' && current ? `<a href="#${current.id}" class="side-current"><span class="code-tag">${esc(current.code)}</span><span><b>${esc(current.title)}</b></span></a>` : ''}
+      <div class="side-bottom">${PAPER}<strong>Tính đúng. Chọn an toàn.</strong><p>Đồng hành cùng vận hành<br>nhà máy giấy bao bì.</p></div></aside>`;
   }
 
-  function footer() {
-    return `<div class="foot">Kết quả mang tính tính toán sơ bộ, dựa trên các công thức và bảng tra phổ biến (IEC 60364-5-52, IEC 60909, DIN 43671, TCVN, sổ tay khí nén/HVAC). Khi đặt hàng thiết bị cần đối chiếu catalogue nhà sản xuất và điều kiện lắp đặt thực tế. Dữ liệu nhập được lưu trên trình duyệt của máy này.</div>`;
+  function bottomNav() {
+    const m = current || lastMod() || MODS[0];
+    return `<nav class="mobile-bottom" aria-label="Điều hướng điện thoại">
+      <a href="#tong-quan" class="bottom-item ${view === 'home' ? 'active' : ''}">${icon('grid')}Tổng quan</a>
+      <button type="button" class="bottom-item" data-menu>${icon('list')}Danh mục</button>
+      <a href="#${m.id}" class="bottom-item ${view === 'calc' ? 'active' : ''}">${icon('calc')}Bảng tính ${esc(m.code)}</a></nav>`;
   }
 
-  function fmtK(k) { return U.f(k, 3); }
+  function footer(calc) {
+    return `<footer class="page-footer ${calc ? 'calc-page-footer' : ''}"><span>${icon('factory')}Dành cho nhà máy giấy bao bì</span><span>Tính sơ bộ · đối chiếu catalogue khi đặt hàng</span></footer>`;
+  }
 
-  function renderModule(m) {
-    const st = stateOf(m);
-    const v = rawValues(m);
-    let h = `<div class="plate-head"><div class="plate-code">${esc(m.code)}</div><div class="plate-body"><h1>${esc(m.title)}</h1><p>${esc(m.desc)}</p></div></div>`;
+  // ---------- Trang tổng quan ----------
+  function toolCard(m) {
+    const featured = store.$last === m.id;
+    return `<a class="tool-card ${featured ? 'featured' : ''}" href="#${m.id}" data-search="${esc(normalize(m.code + ' ' + m.title + ' ' + (m.short || '') + ' ' + m.desc))}"><span class="tool-info"><span class="tool-topline"><span class="code-tag">${esc(m.code)}${featured ? '<span class="tiny-feature">· VỪA MỞ</span>' : ''}</span>${icon('arrow')}</span><span class="tool-name">${esc(m.title)}</span><span class="tool-desc">${esc(m.short || m.desc)}</span></span></a>`;
+  }
+
+  function homeView() {
+    return `<main id="main" class="main"><div class="overview-top"><div><div class="eyebrow">BỘ CÔNG CỤ CHO KỸ SƯ NHÀ MÁY</div><h1>Bảng tính cơ điện</h1><p>Từ nguồn điện đến dây chuyền sản xuất. Chọn công cụ, nhập thông số và kiểm tra phương án.</p>
+      <div class="mobile-summary"><strong>${MODS.length}</strong> bảng tính<span class="dot"></span><strong>${pad2(GROUPS.length)}</strong> nhóm chuyên môn</div></div>
+      <div class="overview-stats"><div class="stat"><b>${MODS.length}<span>.</span></b><span>Bảng tính</span></div><div class="stat"><b>${pad2(GROUPS.length)}<span>.</span></b><span>Nhóm chuyên môn</span></div></div></div>
+      <div class="search-area"><label class="search-box">${icon('search')}<input type="search" id="home-search" placeholder="Tìm bảng tính theo tên hoặc mã..." aria-label="Tìm bảng tính theo tên hoặc mã" autocomplete="off"><span class="key-hint">/</span></label><span class="search-count" id="search-count">${MODS.length} bảng tính</span></div>
+      <div class="groups-grid">${GROUPS.map((g) => `<section class="group" id="nhom-${g.id}" aria-labelledby="title-${g.id}"><div class="group-heading"><span class="group-icon">${icon(g.icon)}</span><h2 id="title-${g.id}">${esc(g.name)}</h2><span class="group-count">${pad2(modsOf(g).length)}</span></div><div class="tool-list">${modsOf(g).map(toolCard).join('')}</div></section>`).join('')}</div>
+      <p class="empty-state" id="empty-state" hidden>Chưa tìm thấy bảng tính phù hợp.<br>Thử tìm bằng tên hoặc mã khác.</p>${footer(false)}</main>`;
+  }
+
+  function bindHome() {
+    const input = $('#home-search');
+    input.addEventListener('input', () => {
+      const q = normalize(input.value.trim());
+      let total = 0;
+      document.querySelectorAll('.group').forEach((sec) => {
+        let n = 0;
+        sec.querySelectorAll('.tool-card').forEach((c) => { c.hidden = !c.dataset.search.includes(q); if (!c.hidden) n++; });
+        sec.hidden = n === 0;
+        sec.querySelector('.group-count').textContent = pad2(n);
+        total += n;
+      });
+      $('#search-count').textContent = `${total} bảng tính`;
+      $('#empty-state').hidden = total !== 0;
+    });
+  }
+
+  // ---------- Trang bảng tính ----------
+  function calcView(m) {
+    const g = groupOf(m), st = stateOf(m), v = rawValues(m);
+    const isPreset = SF_PRESETS.some((p) => Math.abs(p - st.k) < 1e-9);
+    const nIn = m.inputs.filter((i) => visible(i, v)).length;
+    let h = `<main id="main" class="main calc-main"><div class="breadcrumb"><button type="button" data-home aria-label="Về trang tổng quan">${icon('left')}</button><a href="#tong-quan">Tổng quan</a>${icon('chevron')}<a href="#nhom-${g.id}">${esc(g.name)}</a>${icon('chevron')}<span>${esc(m.code)}</span></div>
+      <div class="calc-heading"><div class="eyebrow"><span class="calc-code">${esc(m.code)}</span>${esc(g.name)}</div><h1>${esc(m.title)}</h1><p>${esc(m.desc)}</p></div>`;
     if (m.sf != null) {
-      const isPreset = SF_PRESETS.some((p) => Math.abs(p - st.k) < 1e-9);
-      h += `<div class="sf-bar"><div class="sf-label">Hệ số an toàn <b>k = <span id="k-show">${fmtK(st.k)}</span></b></div>
-        <div class="chips" role="group" aria-label="Chọn hệ số an toàn">${SF_PRESETS.map((p) => `<button type="button" class="chip" data-k="${p}" aria-pressed="${Math.abs(p - st.k) < 1e-9}">${U.f(p, 2)}</button>`).join('')}</div>
-        <label class="sf-custom" for="k-custom">Khác <input id="k-custom" class="plain" inputmode="decimal" autocomplete="off" value="${isPreset ? '' : esc(U.f(st.k, 3))}" placeholder="vd 1,4"></label>
-        <div class="sf-note">${esc(m.sfNote || '')}</div></div>`;
+      h += `<section class="factor-panel" aria-labelledby="factor-title"><div class="factor-caption"><h2 id="factor-title">Hệ số an toàn <i>k = <span id="k-show">${fmtK(st.k)}</span></i></h2><p>${esc(m.sfNote || '')}</p></div>
+        <div><div class="factor-choices" role="group" aria-label="Chọn hệ số an toàn">${SF_PRESETS.map((p) => `<button type="button" class="factor-btn" data-k="${p}" aria-pressed="${Math.abs(p - st.k) < 1e-9}">${U.f(p, 2)}</button>`).join('')}<button type="button" class="factor-btn" data-k="other" aria-pressed="${!isPreset}">Khác</button></div>
+        <label class="custom-factor" id="custom-factor" ${isPreset ? 'hidden' : ''}>Nhập hệ số k<input id="custom-k" type="text" inputmode="decimal" autocomplete="off" value="${esc(U.f(st.k, 3))}" aria-label="Hệ số an toàn tùy chọn"><small>Ví dụ: 1,35</small></label></div></section>`;
+    } else {
+      h += '<div style="height:22px"></div>';
     }
-    h += `<div class="mod-grid"><section class="panel"><div class="panel-h"><span>Thông số đầu vào</span><button type="button" class="btn-ghost" id="btn-reset">Đặt lại mặc định</button></div><div class="panel-b"><div class="fields" id="fields">${fieldsHtml(m, v)}</div></div></section>
-      <section class="panel res" aria-live="polite"><div class="panel-h"><span>Kết quả</span><button type="button" class="btn-ghost" id="btn-copy">Sao chép kết quả</button></div><div class="panel-b" id="result"></div></section></div>`;
-    h += footer();
-    $('#view').innerHTML = `<div class="wrap">${h}</div>`;
-    bindModule(m);
-    renderResult(m);
+    h += `<div class="calc-grid"><div class="calc-left"><section class="panel input-panel" aria-labelledby="input-title"><div class="panel-head"><span class="section-symbol">${icon('sliders')}</span><div><h2 id="input-title">Thông số đầu vào</h2><p id="in-count">${nIn} thông số · lưu trên máy này</p></div><span class="section-num">01</span></div>
+        <form class="input-body" id="calc-form" novalidate><div class="form-grid" id="fields">${fieldsHtml(m, v)}</div><div class="input-hint">${icon('info')}<span>Số thập phân dùng dấu phẩy hoặc dấu chấm, ví dụ 0,85. Kết quả tính lại ngay khi đổi thông số.</span></div></form></section>
+        <p class="left-note">${icon('shield')}<span>Đối chiếu điều kiện lắp đặt thực tế<br>trước khi lựa chọn dây và thiết bị bảo vệ.</span></p></div>
+      <div class="calc-right"><section class="panel result-panel" aria-labelledby="result-title"><div class="panel-head"><span class="section-symbol">${icon('calc')}</span><h2 id="result-title">Kết quả</h2><span class="live-caption">Tính theo thông số nhập</span></div><div class="result-body" id="result" aria-live="polite"></div></section></div></div>${footer(true)}</main>`;
+    return h;
   }
 
   function fieldsHtml(m, v) {
     const st = stateOf(m);
+    // Ô chọn chiếm trọn hàng; ô số bị lẻ một mình trên hàng cũng kéo rộng để không chừa khoảng trống
+    const list = m.inputs.filter((inp) => visible(inp, v)).map((inp) => ({ inp, wide: inp.type === 'sel' || !!inp.wide }));
+    let open = null;
+    for (const it of list) {
+      if (it.wide) { if (open) open.wide = true; open = null; }
+      else open = open ? null : it;
+    }
+    if (open) open.wide = true;
     let h = '';
-    for (const inp of m.inputs) {
-      if (!visible(inp, v)) continue;
+    for (const { inp, wide } of list) {
       const id = `f-${m.id}-${inp.id}`;
-      let ctl;
+      const hint = inp.hint ? `<span class="field-hint">${esc(inp.hint)}</span>` : '';
       if (inp.type === 'sel') {
         const opts = optsOf(inp, v);
         if (!opts.some((o) => String(o[0]) === st.v[inp.id])) st.v[inp.id] = String(opts[0][0]);
-        ctl = `<select id="${id}" data-in="${inp.id}">${opts.map((o) => `<option value="${esc(o[0])}"${String(o[0]) === st.v[inp.id] ? ' selected' : ''}>${esc(o[1])}</option>`).join('')}</select>`;
+        h += `<label class="field wide" data-f="${inp.id}" for="${id}"><span class="field-label">${esc(inp.label)}</span><span class="select-shell"><select id="${id}" data-in="${inp.id}">${opts.map((o) => `<option value="${esc(o[0])}"${String(o[0]) === st.v[inp.id] ? ' selected' : ''}>${esc(o[1])}</option>`).join('')}</select>${icon('down')}</span>${hint}</label>`;
       } else {
-        ctl = `<input id="${id}" data-in="${inp.id}" inputmode="decimal" autocomplete="off" value="${esc(/^-?\d+\.\d+$/.test(st.v[inp.id]) ? st.v[inp.id].replace('.', ',') : st.v[inp.id])}">`;
+        const raw = st.v[inp.id];
+        const shown = /^-?\d+\.\d+$/.test(raw) ? raw.replace('.', ',') : raw;
+        h += `<label class="field${wide ? ' wide' : ''}" data-f="${inp.id}" for="${id}"><span class="field-label">${esc(inp.label)}</span><span class="input-shell"><input id="${id}" data-in="${inp.id}" type="text" inputmode="decimal" autocomplete="off" value="${esc(shown)}">${inp.unit ? `<span class="unit" aria-hidden="true">${esc(inp.unit)}</span>` : ''}</span>${hint}</label>`;
       }
-      h += `<div class="field${inp.wide ? ' wide' : ''}" data-f="${inp.id}"><label for="${id}">${esc(inp.label)}</label><div class="ctl">${ctl}${inp.unit ? `<span class="unit">${esc(inp.unit)}</span>` : ''}</div>${inp.hint ? `<div class="hint">${esc(inp.hint)}</div>` : ''}</div>`;
     }
     return h;
   }
 
-  function bindModule(m) {
+  function bindCalc(m) {
     const st = stateOf(m);
-    const view = $('#view');
-    view.querySelectorAll('.chip').forEach((b) => b.addEventListener('click', () => {
+    const custom = $('#custom-factor'), ck = $('#custom-k');
+    const setPressed = (k, other) => document.querySelectorAll('.factor-btn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.k === 'other' ? other : !other && Math.abs(Number(b.dataset.k) - k) < 1e-9)));
+    document.querySelectorAll('.factor-btn').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.k === 'other') {
+        custom.hidden = false; setPressed(st.k, true); ck.focus(); ck.select();
+        return;
+      }
       st.k = Number(b.dataset.k); save();
-      view.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(c === b)));
-      const ci = $('#k-custom'); if (ci) ci.value = '';
+      custom.hidden = true; ck.value = U.f(st.k, 3);
+      setPressed(st.k, false);
       $('#k-show').textContent = fmtK(st.k);
       renderResult(m);
     }));
-    const kc = $('#k-custom');
-    if (kc) kc.addEventListener('input', () => {
-      const k = U.num(kc.value);
+    if (ck) ck.addEventListener('input', () => {
+      const k = U.num(ck.value);
       if (isFinite(k) && k >= 0.5 && k <= 5) {
         st.k = k; save();
-        view.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(Math.abs(Number(c.dataset.k) - k) < 1e-9)));
         $('#k-show').textContent = fmtK(k);
         renderResult(m);
       }
@@ -196,13 +277,24 @@
       if (t.tagName === 'SELECT') {
         fields.innerHTML = fieldsHtml(m, rawValues(m));
         const again = document.getElementById(t.id); if (again) again.focus();
+        $('#in-count').textContent = `${m.inputs.filter((i) => visible(i, rawValues(m))).length} thông số · lưu trên máy này`;
       }
       renderResult(m);
     });
-    $('#btn-reset').addEventListener('click', () => {
-      store[m.id] = {}; save(); renderModule(m); toast('Đã đặt lại thông số mặc định');
+    $('#calc-form').addEventListener('submit', (e) => e.preventDefault());
+    $('#result').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.id === 'copy-results') copyResult();
+      if (b.id === 'reset-defaults') { store[m.id] = {}; save(); render(); toast('Đã đặt lại thông số mặc định'); }
     });
-    $('#btn-copy').addEventListener('click', () => copyResult(m));
+  }
+
+  // Tách "Tiêu đề: chi tiết" để hiện hai dòng như thiết kế
+  function splitCheck(c) {
+    if (c.length >= 3) return [c[1], c[2]];
+    const t = c[1], i = t.indexOf(': ');
+    if (i > 0 && i < 60) return [t.slice(0, i), t.slice(i + 2)];
+    return [t, ''];
   }
 
   let lastText = '';
@@ -210,32 +302,52 @@
     const st = stateOf(m);
     const v = rawValues(m);
     const box = $('#result');
+    const actions = (copy) => `<div class="result-actions">${copy ? `<button type="button" class="button-primary" id="copy-results">${icon('copy')}Sao chép kết quả</button>` : ''}<button type="button" class="button-secondary" id="reset-defaults">${icon('reset')}Đặt lại mặc định</button></div>`;
     const bad = m.inputs.filter((i) => i.type !== 'sel' && visible(i, v) && !isFinite(v[i.id]));
     document.querySelectorAll('.field').forEach((el) => el.classList.toggle('err', bad.some((b) => b.id === el.dataset.f)));
     if (bad.length) {
-      box.innerHTML = `<div class="error">Chưa đúng định dạng số: ${bad.map((b) => esc(b.label)).join(', ')}. Dùng dấu phẩy hoặc dấu chấm cho phần thập phân, ví dụ 0,85.</div>`;
+      box.innerHTML = `<div class="result-error">${icon('fail')}<span>Chưa đúng định dạng số: ${bad.map((b) => esc(b.label)).join(', ')}. Dùng dấu phẩy hoặc dấu chấm cho phần thập phân, ví dụ 0,85.</span></div>${actions(false)}`;
       lastText = ''; return;
     }
     let r;
     try { r = m.calc(v, m.sf == null ? 1 : st.k, U); } catch (e) { r = { error: e.message || String(e) }; }
-    if (r.error) { box.innerHTML = `<div class="error">${esc(r.error)}</div>`; lastText = ''; return; }
+    if (r.error) { box.innerHTML = `<div class="result-error">${icon('fail')}<span>${esc(r.error)}</span></div>${actions(false)}`; lastText = ''; return; }
+
+    const tiles = r.tiles || [];
+    const main = tiles.find((t) => t.main) || tiles[0];
+    const rest = tiles.filter((t) => t !== main);
     let h = '';
-    if (r.tiles && r.tiles.length) {
-      h += '<div class="tiles">' + r.tiles.map((t) => `<div class="tile${t.main ? ' main' : ''}"><div class="tile-l">${esc(t.l)}</div><div class="tile-v">${esc(t.v)}${t.u ? `<small>${esc(t.u)}</small>` : ''}</div>${t.s ? `<div class="tile-s">${esc(t.s)}</div>` : ''}</div>`).join('') + '</div>';
+    if (main) {
+      const len = String(main.v).length;
+      const size = len <= 6 ? '' : len <= 11 ? ' m' : ' l';
+      h += `<div class="hero-result"><div class="result-label">${esc(main.l)}</div><div class="main-value num${size}"><b>${esc(main.v)}</b>${main.u ? `<span>${esc(main.u)}</span>` : ''}</div>${main.s ? `<div class="result-subline">${icon(groupOf(m).sub)}<span>${esc(main.s)}</span></div>` : ''}${m.id === 'tiet-dien-day' ? CABLE_DRAWING : ''}</div>`;
+    }
+    if (rest.length) {
+      h += '<div class="secondary-results">' + rest.map((t) => {
+        const long = (String(t.v) + (t.u || '')).length > 10;
+        return `<dl class="secondary-result"><dt>${esc(t.l)}</dt><dd class="num${long ? ' long' : ''}">${esc(t.v)}${t.u ? ` <span>${esc(t.u)}</span>` : ''}</dd>${t.s ? `<div class="sub">${esc(t.s)}</div>` : ''}</dl>`;
+      }).join('') + '</div>';
     }
     if (r.checks && r.checks.length) {
-      const lab = { ok: 'Đạt', warn: 'Lưu ý', bad: 'Không đạt' };
-      h += '<div class="sec-t">Kiểm tra</div><div class="checks">' + r.checks.map((c) => `<div class="check"><span class="pill ${c[0]}">${lab[c[0]]}</span><span>${esc(c[1])}</span></div>`).join('') + '</div>';
+      const map = { ok: ['', 'circlecheck', 'Đạt'], warn: ['warn', 'warn', 'Lưu ý'], bad: ['fail', 'fail', 'Không đạt'] };
+      h += `<h3 class="checks-title">Kiểm tra phương án${main ? `<small>Đang chọn: ${esc(main.v)}${main.u ? ' ' + esc(main.u) : ''}</small>` : ''}</h3><ul class="checks">` + r.checks.map((c) => {
+        const [cls, ic, lab] = map[c[0]];
+        const [title, detail] = splitCheck(c);
+        return `<li class="check-row ${cls}"><span class="check-status-icon">${icon(ic)}</span><div class="check-copy"><strong>${esc(title)}</strong>${detail ? `<p>${esc(detail)}</p>` : ''}</div><span class="badge ${cls}">${lab}</span></li>`;
+      }).join('') + '</ul>';
     }
     if (r.steps && r.steps.length) {
-      h += '<div class="sec-t">Diễn giải tính toán</div><div class="steps-wrap"><table class="steps"><thead><tr><th>Đại lượng</th><th>Công thức / cơ sở</th><th style="text-align:right">Giá trị</th></tr></thead><tbody>' +
-        r.steps.map((s) => `<tr><td>${esc(s[0])}</td><td class="f">${esc(s[1] || '')}</td><td class="v">${esc(s[2])}</td></tr>`).join('') + '</tbody></table></div>';
+      h += `<section class="formula-panel" aria-labelledby="formula-title"><h3 class="formula-title" id="formula-title">${icon('formula')}Diễn giải công thức</h3><div class="formula-wrap"><table><thead><tr><th scope="col">Đại lượng</th><th scope="col">Công thức</th><th scope="col">Giá trị</th></tr></thead><tbody>` +
+        r.steps.map((s) => `<tr><td>${esc(s[0])}</td><td class="math">${esc(s[1] || '')}</td><td>${esc(s[2])}</td></tr>`).join('') + '</tbody></table></div></section>';
     }
     if (r.notes && r.notes.length) {
-      h += '<div class="sec-t">Ghi chú kỹ thuật</div><ul class="notes">' + r.notes.map((n) => `<li>${esc(n)}</li>`).join('') + '</ul>';
+      h += `<div class="notes-box"><h3>${icon('info')}Ghi chú kỹ thuật</h3><ul>${r.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
     }
+    h += actions(true);
+    h += `<p class="result-note">${icon('info')}<span>Kết quả tính sơ bộ theo công thức và bảng tra phổ biến.<br>Đối chiếu catalogue nhà sản xuất và điều kiện lắp đặt khi đặt hàng.</span></p>`;
     box.innerHTML = h;
-    // Bản text để sao chép (dán vào Zalo, email, báo cáo)
+
+    // Bản chữ để sao chép (dán vào Zalo, email, báo cáo)
     const L = [`${m.code} ${m.title}`];
     if (m.sf != null) L.push(`Hệ số an toàn k = ${fmtK(st.k)}`);
     L.push('— Đầu vào:');
@@ -245,8 +357,8 @@
       L.push(`  ${i.label}: ${val}${i.unit ? ' ' + i.unit : ''}`);
     }
     L.push('— Kết quả:');
-    (r.tiles || []).forEach((t) => L.push(`  ${t.l}: ${t.v}${t.u ? ' ' + t.u : ''}${t.s ? ' (' + t.s + ')' : ''}`));
-    (r.checks || []).forEach((c) => L.push(`  [${c[0] === 'ok' ? 'Đạt' : c[0] === 'warn' ? 'Lưu ý' : 'Không đạt'}] ${c[1]}`));
+    tiles.forEach((t) => L.push(`  ${t.l}: ${t.v}${t.u ? ' ' + t.u : ''}${t.s ? ' (' + t.s + ')' : ''}`));
+    (r.checks || []).forEach((c) => { const [a, b] = splitCheck(c); L.push(`  [${c[0] === 'ok' ? 'Đạt' : c[0] === 'warn' ? 'Lưu ý' : 'Không đạt'}] ${a}${b ? ': ' + b : ''}`); });
     lastText = L.join('\n');
   }
 
@@ -259,34 +371,101 @@
       let ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
       ta.remove(); toast(ok ? 'Đã sao chép kết quả' : 'Trình duyệt chặn sao chép');
     };
-    try {
-      navigator.clipboard.writeText(lastText).then(() => toast('Đã sao chép kết quả'), fallback);
-    } catch (e) { fallback(); }
+    try { navigator.clipboard.writeText(lastText).then(() => toast('Đã sao chép kết quả'), fallback); } catch (e) { fallback(); }
   }
 
   let toastTimer;
   function toast(msg) {
-    let t = $('.toast');
-    if (!t) { t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+    const t = $('#toast');
     t.textContent = msg; t.hidden = false;
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 1800);
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2500);
+  }
+
+  // ---------- Menu danh mục (trượt từ trái) ----------
+  let prevFocus = null;
+  function openMenu() {
+    const ov = $('#overlay');
+    if (!ov.hidden) return;
+    prevFocus = document.activeElement;
+    const openG = current ? current.group : GROUPS[0].id;
+    ov.innerHTML = `<div class="backdrop" data-close></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" tabindex="-1">
+      <div class="drawer-top">${BRAND}<button type="button" class="icon-button" data-close aria-label="Đóng menu danh mục">${icon('close')}</button></div>
+      <div class="drawer-head"><div class="eyebrow">${MODS.length} CÔNG CỤ · ${GROUPS.length} NHÓM CHUYÊN MÔN</div><h2 id="drawer-title">Danh mục bảng tính</h2><p>Chọn công cụ phù hợp với công việc.</p><label class="search-box">${icon('search')}<input id="menu-search" type="search" placeholder="Tìm theo tên hoặc mã..." aria-label="Tìm trong danh mục" autocomplete="off"></label></div>
+      <nav class="drawer-scroll" aria-label="Danh mục bảng tính">${GROUPS.map((g, i) => `<details ${g.id === openG ? 'open' : ''}><summary><span class="group-icon">${icon(g.icon)}</span>${esc(g.name)}<span class="group-count">${pad2(modsOf(g).length)}</span>${icon('down')}</summary><div class="drawer-items">${modsOf(g).map((m) => {
+        const cur = current && current.id === m.id;
+        return `<a class="drawer-item ${cur ? 'current' : ''}" href="#${m.id}" data-close data-search="${esc(normalize(m.code + ' ' + m.title))}" ${cur ? 'aria-current="page"' : ''}><span class="code-tag">${esc(m.code)}</span><span>${esc(m.title)}</span>${cur ? icon('chevron') : ''}</a>`;
+      }).join('')}</div></details>${i < GROUPS.length - 1 ? '<hr class="drawer-separator">' : ''}`).join('')}<p id="menu-empty" class="empty-state" hidden>Không có bảng tính phù hợp.</p></nav>
+      <div class="drawer-footer"><a class="drawer-home" href="#tong-quan" data-close>${icon('grid')}Về trang tổng quan${icon('arrow')}</a><p>Tính đúng. Chọn an toàn.</p></div></aside>`;
+    ov.hidden = false;
+    document.body.classList.add('menu-open');
+    document.querySelectorAll('[data-menu]').forEach((e) => e.setAttribute('aria-expanded', 'true'));
+    ov.querySelectorAll('[data-close]').forEach((e) => e.addEventListener('click', () => closeMenu(false)));
+    ov.querySelector('.brand').addEventListener('click', () => closeMenu(false));
+    const ms = $('#menu-search');
+    ms.addEventListener('input', () => {
+      const q = normalize(ms.value.trim());
+      let total = 0;
+      ov.querySelectorAll('details').forEach((d) => {
+        let n = 0;
+        d.querySelectorAll('.drawer-item').forEach((a) => { a.hidden = !a.dataset.search.includes(q); if (!a.hidden) n++; });
+        d.hidden = n === 0; if (q) d.open = true;
+        d.querySelector('.group-count').textContent = pad2(n);
+        total += n;
+      });
+      $('#menu-empty').hidden = total !== 0;
+      ov.querySelectorAll('.drawer-separator').forEach((hr) => { hr.hidden = !!q; });
+    });
+    $('.drawer').focus();
+  }
+  function closeMenu(restore = true) {
+    const ov = $('#overlay');
+    if (ov.hidden) return;
+    ov.hidden = true; ov.innerHTML = '';
+    document.body.classList.remove('menu-open');
+    document.querySelectorAll('[data-menu]').forEach((e) => e.setAttribute('aria-expanded', 'false'));
+    if (restore && prevFocus && prevFocus.isConnected) prevFocus.focus();
   }
 
   // ---------- Điều hướng ----------
-  function route() {
+  function render() {
+    closeMenu(false);
     const id = (location.hash || '').replace('#', '');
     const m = MODS.find((x) => x.id === id);
-    document.body.classList.remove('nav-open');
-    renderNav(m ? m.id : null);
-    if (m) { renderModule(m); document.title = `${m.title} · Tính toán cơ điện`; }
-    else { renderHome(); document.title = 'Tính toán cơ điện'; }
-    window.scrollTo(0, 0);
+    view = m ? 'calc' : 'home';
+    current = m || null;
+    if (m) { store.$last = m.id; save(); }
+    $('#app').innerHTML = header() + `<div class="app-layout">${sidebar()}${m ? calcView(m) : homeView()}</div>` + bottomNav();
+    document.querySelectorAll('[data-menu]').forEach((e) => e.addEventListener('click', openMenu));
+    document.querySelectorAll('[data-home]').forEach((e) => e.addEventListener('click', () => { location.hash = 'tong-quan'; }));
+    document.title = m ? `${m.code} ${m.title} · Tính toán cơ điện` : 'Tính toán cơ điện';
+    if (m) { bindCalc(m); renderResult(m); window.scrollTo(0, 0); }
+    else {
+      bindHome();
+      const g = id.startsWith('nhom-') ? document.getElementById(id) : null;
+      if (g) g.scrollIntoView(); else window.scrollTo(0, 0);
+      if (id === 'danh-muc') openMenu();
+    }
   }
 
   function start() {
-    $('#menu-btn').addEventListener('click', () => document.body.classList.toggle('nav-open'));
-    window.addEventListener('hashchange', route);
-    route();
+    document.addEventListener('keydown', (e) => {
+      const ov = $('#overlay');
+      if (!ov.hidden) {
+        if (e.key === 'Escape') { e.preventDefault(); closeMenu(); }
+        if (e.key === 'Tab') {
+          const f = [...$('.drawer').querySelectorAll('a,button,input,summary')].filter((x) => x.offsetParent !== null);
+          if (!f.length) return;
+          const first = f[0], last = f[f.length - 1];
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+        return;
+      }
+      const tag = (document.activeElement && document.activeElement.tagName) || '';
+      if (e.key === '/' && view === 'home' && !/INPUT|SELECT|TEXTAREA/.test(tag)) { e.preventDefault(); $('#home-search').focus(); }
+    });
+    window.addEventListener('hashchange', render);
+    render();
   }
 
   window.CD = {

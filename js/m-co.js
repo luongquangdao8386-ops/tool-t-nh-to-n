@@ -16,7 +16,7 @@
   // ================= C-01 Hệ thống chiller =================
   const CH_RT = [20, 30, 40, 50, 60, 80, 100, 120, 150, 180, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 1000, 1200, 1500, 2000];
   CD.register({
-    id: 'chiller', group: 'co', code: 'C-01', title: 'Hệ thống chiller',
+    id: 'chiller', group: 'co', code: 'C-01', title: 'Hệ thống chiller', short: 'RT, nước lạnh, tháp giải nhiệt, bơm.',
     desc: 'Công suất lạnh, số lượng chiller, điện năng, lưu lượng nước lạnh / giải nhiệt, bơm, tháp giải nhiệt, ống chính và nước bổ sung.',
     sf: 1.15, sfNote: 'Tải lạnh thiết kế Qtk = Q × k.',
     inputs: [
@@ -111,7 +111,7 @@
   const HP = { 9000: '1 HP', 12000: '1,5 HP', 18000: '2 HP', 24000: '2,5 HP' };
   const PIPE = { 9000: '6,35 / 9,52', 12000: '6,35 / 9,52', 18000: '6,35 / 12,7', 24000: '6,35 / 15,88' };
   CD.register({
-    id: 'dieu-hoa', group: 'co', code: 'C-02', title: 'Điều hoà treo tường',
+    id: 'dieu-hoa', group: 'co', code: 'C-02', title: 'Điều hoà treo tường', short: 'BTU theo phòng, aptomat, ống đồng.',
     desc: 'Tải lạnh phòng theo diện tích, chiều cao, người, thiết bị, hướng nắng; chọn số máy, BTU, HP, aptomat, dây và ống đồng.',
     sf: 1.1, sfNote: 'Tải lạnh thiết kế = Q × k.',
     inputs: [
@@ -169,7 +169,7 @@
   // ================= C-03 Khí nén =================
   const TANK = [300, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 15000, 20000];
   CD.register({
-    id: 'khi-nen', group: 'co', code: 'C-03', title: 'Hệ thống khí nén',
+    id: 'khi-nen', group: 'co', code: 'C-03', title: 'Hệ thống khí nén', short: 'Máy nén, bình chứa, ống chính.',
     desc: 'Lưu lượng máy nén theo nhu cầu, rò rỉ, dự phòng; công suất máy nén, bình chứa, đường ống chính, máy sấy, chi phí điện năng.',
     sf: 1.15, sfNote: 'Lưu lượng thiết kế = nhu cầu × đồng thời × (1 + rò rỉ) × (1 + dự phòng) × k.',
     inputs: [
@@ -235,7 +235,7 @@
 
   // ================= C-04 Hút khí thải / thông gió =================
   CD.register({
-    id: 'khi-thai', group: 'co', code: 'C-04', title: 'Hút khí thải & thông gió',
+    id: 'khi-thai', group: 'co', code: 'C-04', title: 'Hút khí thải & thông gió', short: 'Lưu lượng gió, quạt, ống gió.',
     desc: 'Lưu lượng gió theo bội số trao đổi, theo nhiệt thải hoặc theo chụp hút; chọn quạt, công suất động cơ, kích thước ống gió.',
     sf: 1.15, sfNote: 'Lưu lượng thiết kế = Q × k.',
     inputs: [
@@ -303,7 +303,7 @@
 
   // ================= C-05 Bơm & biến tần =================
   CD.register({
-    id: 'bom', group: 'co', code: 'C-05', title: 'Bơm & tiết kiệm bằng biến tần', suggest: true,
+    id: 'bom', group: 'co', code: 'C-05', title: 'Bơm & tiết kiệm bằng biến tần', short: 'Công suất bơm, tiết kiệm biến tần.', suggest: true,
     desc: 'Công suất bơm theo lưu lượng – cột áp, chọn động cơ, đường kính ống hút/đẩy, ước tính tiết kiệm điện khi chạy biến tần.',
     sf: 1.15, sfNote: 'Công suất động cơ ≥ công suất trục × k.',
     inputs: [
@@ -365,7 +365,7 @@
     [12, 0.1632, 188.0, 1986], [14, 0.1408, 195.0, 1960], [16, 0.1237, 201.4, 1935], [18, 0.1104, 207.1, 1912], [21, 0.0950, 214.9, 1880]];
   const col = (i) => STEAM.map((r) => [r[0], r[i]]);
   CD.register({
-    id: 'ong-hoi', group: 'co', code: 'C-06', title: 'Ống hơi & lò hơi', suggest: true,
+    id: 'ong-hoi', group: 'co', code: 'C-06', title: 'Ống hơi & lò hơi', short: 'Cỡ ống hơi, nhiệt lượng, nước ngưng.', suggest: true,
     desc: 'Kích thước ống hơi bão hòa theo lưu lượng – áp suất – vận tốc, nhiệt lượng, nhiệt độ bão hòa và ống nước ngưng hồi.',
     sf: 1.15, sfNote: 'Lưu lượng hơi thiết kế = m × k.',
     inputs: [
@@ -416,7 +416,7 @@
   // ================= C-07 Chiếu sáng nhà xưởng =================
   const UF = [[0.6, 0.38], [0.8, 0.45], [1, 0.5], [1.25, 0.55], [1.5, 0.59], [2, 0.64], [2.5, 0.68], [3, 0.71], [4, 0.74], [5, 0.76]];
   CD.register({
-    id: 'chieu-sang', group: 'co', code: 'C-07', title: 'Chiếu sáng nhà xưởng', suggest: true,
+    id: 'chieu-sang', group: 'co', code: 'C-07', title: 'Chiếu sáng nhà xưởng', short: 'Số đèn theo độ rọi yêu cầu.', suggest: true,
     desc: 'Số đèn theo phương pháp quang thông (chỉ số phòng, hệ số sử dụng, hệ số duy trì), bố trí lưới đèn, mật độ công suất.',
     sf: 1.1, sfNote: 'Số đèn = tính toán × k.',
     inputs: [
@@ -478,7 +478,7 @@
   function toC(x, u) { return u === '°F' ? (x - 32) * 5 / 9 : u === 'K' ? x - 273.15 : x; }
   function fromC(c, u) { return u === '°F' ? c * 9 / 5 + 32 : u === 'K' ? c + 273.15 : c; }
   CD.register({
-    id: 'quy-doi', group: 'co', code: 'C-08', title: 'Quy đổi đơn vị', suggest: true,
+    id: 'quy-doi', group: 'co', code: 'C-08', title: 'Quy đổi đơn vị', short: 'Công suất, áp suất, lưu lượng, nhiệt độ.', suggest: true,
     desc: 'Đổi nhanh công suất, năng suất lạnh, áp suất, lưu lượng, năng lượng, nhiệt độ hay gặp trong cơ điện.',
     sf: null,
     inputs: [
