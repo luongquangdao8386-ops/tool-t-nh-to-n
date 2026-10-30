@@ -38,6 +38,9 @@
       return null;
     },
     velocity(m3h, idmm) { return (m3h / 3600) / (Math.PI * Math.pow(idmm / 1000, 2) / 4); },
+    // Ô chọn tùy biến dùng chung: 'auto' = tool tự chọn theo dãy chuẩn và giả thiết điển hình; 'custom' = người dùng tự nhập
+    cfg(label, auto, hint) { return { id: 'cfg', label, type: 'sel', value: 'auto', hint, opts: [['auto', auto], ['custom', 'Tự nhập (tùy biến)']] }; },
+    custom(v) { return v.cfg === 'custom'; },
     breakerType(In) {
       if (In <= 63) return 'MCB';
       if (In <= 630) return 'MCCB';

@@ -4,6 +4,7 @@ Bộ công cụ hỗ trợ tính toán cơ điện cho nhà máy giấy bao bì.
 
 - Mỗi bảng tính có **hệ số an toàn k** chọn nhanh (1 · 1,1 · 1,15 · 1,2 · 1,25 · 1,3 · 1,5) hoặc tự nhập.
 - Kết quả chọn theo dãy thiết bị tiêu chuẩn, có mục kiểm tra Đạt / Lưu ý / Không đạt, bảng diễn giải công thức và mục **Cơ sở tính toán & cách kiểm chứng** (tiêu chuẩn, giả thiết, cách tự kiểm).
+- **Tùy biến:** cuối phần thông số của mỗi bảng có ô "Cách chọn …" hoặc "Giả thiết tính". Chọn **Tự nhập (tùy biến)** để nhập thiết bị có sẵn, số liệu catalogue hoặc thay giả thiết của tool; tool kiểm tra và báo Đạt / Lưu ý / Không đạt.
 - **Không lưu dữ liệu.** Số nhập chỉ giữ khi đang dùng; về trang chủ (bấm logo) thì mọi bảng trở về số mặc định.
 
 > Đây là công cụ hỗ trợ tính toán. Thiết kế chính thức phải được kỹ sư có thẩm quyền kiểm tra theo tiêu chuẩn hiện hành và catalogue thiết bị.
@@ -43,6 +44,31 @@ Bộ công cụ hỗ trợ tính toán cơ điện cho nhà máy giấy bao bì.
 | C-06 | Ống hơi & lò hơi | Bảng hơi IAPWS-IF97; ống Sch40 |
 | C-07 | Chiếu sáng nhà xưởng | Phương pháp quang thông; QCVN 22:2016/BYT |
 | C-08 | Quy đổi đơn vị | Hằng số quy đổi chuẩn |
+
+## Tùy biến
+
+| Mã | Tự nhập được |
+|---|---|
+| Đ-02 | Cỡ cáp bất kỳ (kể cả 400–630 mm², cáp đơn lõi), số sợi, Iz của hãng (ở điều kiện chuẩn hoặc đã hiệu chỉnh), aptomat thực tế, điện kháng x |
+| Đ-03 | Aptomat có sẵn: In / Ir, Icu, loại MCB hoặc MCCB / ACB |
+| Đ-04 | Hệ số điện áp c, điện kháng cáp x, bội số ILR/IrM của động cơ |
+| Đ-05 | In theo nhãn, IA/IN, dòng giới hạn khởi động mềm, dòng khởi động qua biến tần |
+| Đ-06 | Số cấp bất kỳ, điện áp định mức tụ, cuộn kháng p, tủ có sẵn (quy đổi dung lượng trên nhãn ↔ công suất thực ở lưới) |
+| T-01 | Công suất MBA bất kỳ (kể cả trên 5000 kVA), hệ số quá tải sự cố |
+| T-02 | Cầu chì theo bảng của hãng, cỡ cáp trung thế và dòng cho phép theo catalogue |
+| T-03 | ACB có sẵn: In / Ir, Icu |
+| T-04 | Cấu hình thanh cái bất kỳ và dòng định mức của nhà chế tạo |
+| T-05 | Nhiều máy phát chạy song song, công suất mỗi máy, bội số khởi động, η và cosφ động cơ, điện áp, hệ số công suất máy phát |
+| T-06 | Số cọc bất kỳ, hệ số sử dụng (mạch vòng, lưới, nhiều hàng) |
+| C-01 | Cỡ chiller (kể cả trên 2000 RT), hiệu suất bơm, hệ số động cơ bơm, cosφ, điện áp |
+| C-02 | Mật độ tải lạnh, hệ số nắng, cỡ máy, COP, điện áp |
+| C-03 | Số chu kỳ tải / không tải, chênh áp, chiều dài tương đương, số máy dự phòng, hệ số máy sấy |
+| C-04 | Khối lượng riêng không khí, hệ số động cơ, tỉ lệ cạnh ống, tỉ lệ gió bù |
+| C-05 | Động cơ có sẵn (kể cả trên 1000 kW), điện áp, cosφ, hiệu suất biến tần, đặc tính tiết lưu |
+| C-06 | Cỡ ống DN để kiểm tra vận tốc |
+| C-07 | Hệ số sử dụng U, số hàng đèn, dòng MCB, cosφ đèn |
+
+Đ-01 chỉ tính dòng điện từ công suất (mọi ô đều tự nhập; cáp và aptomat chi tiết ở Đ-02, Đ-03). C-08 là quy đổi đơn vị.
 
 ## Giao diện
 

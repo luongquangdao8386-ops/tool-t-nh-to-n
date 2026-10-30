@@ -4,6 +4,7 @@
   const { U } = CD;
   const f = U.f, SQ3 = U.SQ3;
   const guard = (cond, msg) => { if (cond) throw new Error(msg); };
+  const custom = U.custom;
 
   // ---------- Thanh cái đồng chữ nhật, AC 50 Hz – DIN 43671 (môi trường 35 °C, thanh 65 °C) ----------
   // [rộng, dày, 1 thanh có sơn, 2 thanh có sơn, 3 thanh có sơn, 4 thanh có sơn (bố trí 2 cặp II II; null = bảng không có), 1 thanh để trần] – A mỗi pha.
@@ -65,7 +66,10 @@
       { id: 'type', label: 'Loại máy', type: 'sel', value: 'oil', opts: [['oil', 'Máy dầu'], ['dry', 'Máy khô (cast resin)']] },
       { id: 'uk', label: 'Điện áp ngắn mạch Uk', unit: '%', value: 0, hint: '0 = lấy giá trị tối thiểu theo IEC 60076-5; có nhãn máy thì nhập theo nhãn' },
       { id: 'uhv', label: 'Điện áp sơ cấp', type: 'sel', value: '22', opts: UHV },
-      { id: 'ulv', label: 'Điện áp thứ cấp', unit: 'V', value: 400 }
+      { id: 'ulv', label: 'Điện áp thứ cấp', unit: 'V', value: 400 },
+      U.cfg('Cách chọn MBA', 'Tự chọn theo dãy chuẩn', 'Tự nhập: MBA cỡ bất kỳ (kể cả trên 5000 kVA), hệ số quá tải sự cố'),
+      { id: 'cs', label: 'Công suất mỗi MBA', unit: 'kVA', value: 0, show: custom, hint: 'Cỡ bất kỳ, kể cả trên 5000 kVA. 0 = tool chọn theo dãy chuẩn' },
+      { id: 'ckqt', label: 'Hệ số quá tải sự cố cho phép', value: 0, show: (v) => custom(v) && v.n === '2', hint: '0 = 1,4 máy dầu; 1,2 máy khô. Lấy theo hướng dẫn tải IEC 60076-7 / 60076-12 hoặc nhà sản xuất' }
     ],
     basis: {
       std: [
@@ -75,7 +79,8 @@
       ],
       assume: [
         '2 máy: mỗi máy ≥ max(Stk/2; Stk/kqt), kqt = 1,4 máy dầu (quá tải sự cố ≤ 5 ngày, ≤ 6 giờ/ngày), 1,2 máy khô không quạt.',
-        'Dãy công suất phổ biến 50…5000 kVA.'
+        'Dãy công suất phổ biến 50…5000 kVA.',
+        'Chế độ tự nhập: kiểm tra MBA cỡ bất kỳ và hệ số quá tải sự cố theo hồ sơ nhà sản xuất; Uk = 0 thì lấy tối thiểu IEC 60076-5 (đến 8 % cho 6,3–25 MVA, 10 % cho 25–40 MVA).'
       ],
       verify: [
         'Knc nên lấy từ số liệu công tơ đa năng (Pmax 15–30 phút) của các tháng gần nhất.',
@@ -88,24 +93,28 @@
       const Ptt = v.p * v.kdt, Stt = Ptt / v.cos;
       const Stk = Stt * (1 + v.dp / 100) * k;
       const n = Number(v.n);
-      const kqt = v.type === 'oil' ? 1.4 : 1.2;
+      const own = custom(v);
+      guard(own && (v.cs < 0 || v.ckqt < 0), 'Công suất MBA và hệ số quá tải không được âm.');
+      const kqt = own && v.ckqt > 0 ? v.ckqt : v.type === 'oil' ? 1.4 : 1.2;
       const need = n === 1 ? Stk : Math.max(Stk / 2, Stk / kqt);
-      const Sdm = U.pick(U.STD.trafo, need);
-      guard(!Sdm, 'Công suất vượt 5000 kVA/máy – nên chia thêm máy hoặc lên cấp điện áp.');
+      const mine = own && v.cs > 0;
+      const Sdm = mine ? v.cs : U.pick(U.STD.trafo, need);
+      guard(!Sdm, `Cần ${f(need, 0)} kVA mỗi máy, vượt dãy chuẩn 5000 kVA – chọn 2 máy, lên cấp điện áp, hoặc chọn "Tự nhập MBA" để kiểm tra máy lớn hơn.`);
       const uk = v.uk > 0 ? v.uk : U.ukIEC(Sdm);
       const Ihv = Sdm / (SQ3 * Number(v.uhv)), Ilv = Sdm * 1000 / (SQ3 * v.ulv);
       const ik1 = U.ikTrafo(Sdm, uk, v.ulv);
       const Isc = ik1.Ik * n;
       const beta = Stt / (n * Sdm);
-      const checks = [
-        [beta >= 0.4 && beta <= 0.85 ? 'ok' : 'warn', 'Hệ số mang tải hiện tại', `β = ${f(beta * 100, 0)} % (vùng kinh tế 50–80 %)`]
-      ];
-      if (n === 2) checks.push([Sdm * kqt >= Stk ? 'ok' : 'bad', 'Sự cố 1 máy', `Máy còn lại quá tải ${f(kqt, 1)} lần gánh ${f(Sdm * kqt, 0)} kVA ≥ ${f(Stk, 0)} kVA`]);
+      const checks = [];
+      if (mine) checks.push([Sdm >= need ? 'ok' : 'bad', 'Công suất MBA tự nhập', n === 1 ? `${f(Sdm)} kVA ${Sdm >= need ? '≥' : '<'} Stk = ${f(Stk, 0)} kVA` : `${f(Sdm)} kVA ${Sdm >= need ? '≥' : '<'} max(Stk/2; Stk/${f(kqt, 2)}) = ${f(need, 0)} kVA`]);
+      checks.push([beta >= 0.4 && beta <= 0.85 ? 'ok' : 'warn', 'Hệ số mang tải hiện tại', `β = ${f(beta * 100, 0)} % (nên 40–85 %, kinh tế nhất 50–80 %)`]);
+      if (n === 2) checks.push([Sdm * kqt >= Stk ? 'ok' : 'bad', 'Sự cố 1 máy', `Máy còn lại quá tải ${f(kqt, 2)} lần gánh ${f(Sdm * kqt, 0)} kVA ${Sdm * kqt >= Stk ? '≥' : '<'} ${f(Stk, 0)} kVA`]);
       if (n === 1 && Sdm >= 2000) checks.push(['warn', 'Độ tin cậy', 'Một máy ≥ 2000 kVA: mất máy là dừng toàn nhà máy – cân nhắc 2 máy.']);
+      if (Ilv > 6300) checks.push(['warn', 'Dòng phía hạ thế', `${f(Ilv, 0)} A vượt ACB lớn nhất 6300 A – chia nhiều MBA, nhiều phân đoạn hoặc dùng điện áp thứ cấp cao hơn.`]);
       if (n === 2) checks.push(['warn', 'Vận hành song song', `Hai máy cùng tổ đấu dây, cùng tỉ số biến, Uk lệch ≤ 10 %; Ik hạ thế tăng gấp đôi (${f(Isc, 1)} kA).`]);
       return {
         tiles: [
-          { l: 'Máy biến áp chọn', v: `${n > 1 ? '2 × ' : ''}${Sdm}`, u: 'kVA', main: true, s: `${v.uhv}/${f(v.ulv / 1000, 2)} kV · ${v.type === 'oil' ? 'máy dầu' : 'máy khô'} · Uk = ${f(uk, 1)} %${v.uk > 0 ? '' : ' (IEC 60076-5)'}` },
+          { l: mine ? 'Máy biến áp kiểm tra' : 'Máy biến áp chọn', v: `${n > 1 ? '2 × ' : ''}${mine ? f(Sdm) : Sdm}`, u: 'kVA', main: true, s: `${v.uhv}/${f(v.ulv / 1000, 2)} kV · ${v.type === 'oil' ? 'máy dầu' : 'máy khô'} · Uk = ${f(uk, 1)} %${v.uk > 0 ? '' : ' (IEC 60076-5)'}${mine ? ' · tự nhập' : ''}` },
           { l: 'Công suất tính toán Stt', v: f(Stt, 0), u: 'kVA', s: `Ptt = ${f(Ptt, 0)} kW` },
           { l: 'Công suất thiết kế Stk', v: f(Stk, 0), u: 'kVA' },
           { l: 'Dòng định mức sơ cấp', v: f(Ihv, 1), u: 'A' },
@@ -117,8 +126,8 @@
           ['Công suất tác dụng tính toán', 'Ptt = ΣPđ × Knc', `${f(Ptt, 1)} kW`],
           ['Công suất biểu kiến', 'Stt = Ptt / cosφ', `${f(Stt, 1)} kVA`],
           ['Công suất thiết kế', 'Stk = Stt × (1 + dp) × k', `${f(Stk, 1)} kVA`],
-          n === 2 ? ['Điều kiện mỗi máy', `S ≥ max(Stk/2; Stk/${f(kqt, 1)})`, `${f(need, 1)} kVA`] : null,
-          ['Chọn theo dãy chuẩn', 'Sđm ≥ yêu cầu', `${Sdm} kVA`],
+          n === 2 ? ['Điều kiện mỗi máy', `S ≥ max(Stk/2; Stk/${f(kqt, 2)})`, `${f(need, 1)} kVA`] : null,
+          mine ? ['MBA tự nhập', 'Sđm (nhập) ≥ yêu cầu', `${f(Sdm)} kVA`] : ['Chọn theo dãy chuẩn', 'Sđm ≥ yêu cầu', `${Sdm} kVA`],
           ['Dòng sơ cấp', 'I1 = Sđm / (√3·U1)', `${f(Ihv, 2)} A`],
           ['Dòng thứ cấp', 'I2 = Sđm / (√3·U2)', `${f(Ilv, 1)} A`],
           ['Ngắn mạch đầu cực', 'Ik = c·Un / (√3·KT·ZT), c = 1,05', `${f(Isc, 2)} kA`]
@@ -127,7 +136,7 @@
           'Nên chọn máy hiệu suất cao theo TCVN 8525 để giảm tổn thất không tải khi chạy non tải.',
           'Lắp trong nhà xưởng nhiều bụi giấy: ưu tiên máy dầu kín hoặc máy khô có vỏ IP31 trở lên.'
         ],
-        raw: { Ptt, Stt, Stk, Sdm, uk, Ihv, Ilv, Isc, beta }
+        raw: { Ptt, Stt, Stk, need, kqt, Sdm, uk, Ihv, Ilv, Isc, beta }
       };
     }
   });
@@ -147,7 +156,11 @@
       { id: 'ik', label: 'Dòng ngắn mạch lưới', unit: 'kA', value: 25, hint: 'Hỏi Điện lực; 22 kV thường 20–25 kA' },
       { id: 't', label: 'Thời gian chịu ngắn mạch của tủ', unit: 's', value: 1 },
       { id: 'tc', label: 'Thời gian cắt sự cố (tính cáp)', unit: 's', value: 0.5, hint: 'Thời gian rơ le + máy cắt, thường 0,3–1 s' },
-      { id: 'prot', label: 'Bảo vệ MBA', type: 'sel', value: 'auto', opts: [['auto', 'Tự đề xuất'], ['lbs', 'Cầu dao phụ tải + cầu chì'], ['vcb', 'Máy cắt chân không + rơ le']] }
+      { id: 'prot', label: 'Bảo vệ MBA', type: 'sel', value: 'auto', opts: [['auto', 'Tự đề xuất'], ['lbs', 'Cầu dao phụ tải + cầu chì'], ['vcb', 'Máy cắt chân không + rơ le']] },
+      U.cfg('Cầu chì, cáp trung thế', 'Tự chọn (ước tính)', 'Tự nhập: cầu chì theo bảng của hãng, cáp theo catalogue'),
+      { id: 'cfu', label: 'Cầu chì theo bảng của hãng', unit: 'A', value: 0, show: (v) => custom(v) && v.prot !== 'vcb', hint: '0 = ước tính 1,6 × I MBA' },
+      { id: 'ccs', label: 'Tiết diện cáp trung thế', unit: 'mm²', value: 0, show: custom, hint: '0 = tool tự chọn' },
+      { id: 'cci', label: 'Dòng cho phép cáp theo catalogue', unit: 'A', value: 0, show: custom, hint: 'Đã hiệu chỉnh theo cách lắp. 0 = bảng ước tính của tool (cáp Cu/XLPE 3 lõi 24 kV đi ngầm)' }
     ],
     basis: {
       std: [
@@ -156,7 +169,8 @@
       ],
       assume: [
         'Cầu chì bảo vệ MBA ≈ 1,6–2 × I định mức MBA (chịu dòng xung kích khi đóng máy) – quy tắc kinh nghiệm.',
-        'Dòng cho phép cáp trung thế lấy thấp, chỉ để kiểm tra sơ bộ.'
+        'Dòng cho phép cáp trung thế lấy thấp, chỉ để kiểm tra sơ bộ.',
+        'Chế độ tự nhập: dùng cầu chì theo bảng phối hợp của hãng và cáp theo catalogue; tool kiểm tra dòng tải và ổn định nhiệt ngắn mạch của cáp.'
       ],
       verify: [
         'Cầu chì phải chọn theo bảng phối hợp cầu chì – MBA của hãng (Siemens, Schneider, ABB, SIBA).',
@@ -171,33 +185,45 @@
       const Ika = U.pick([16, 20, 25, 31.5, 40], v.ik);
       guard(!Ika, 'Dòng ngắn mạch vượt 40 kA – cần thiết bị đặc biệt.');
       const IT = v.smax / (SQ3 * Ukv);
-      const fuse = U.pick(U.STD.fuseMV, 1.6 * IT);
+      const own = custom(v);
+      guard(own && (v.cfu < 0 || v.ccs < 0 || v.cci < 0), 'Số liệu tự nhập không được âm.');
+      const myFuse = own && v.cfu > 0;
+      const fuse = myFuse ? v.cfu : U.pick(U.STD.fuseMV, 1.6 * IT);
       const useVcb = v.prot === 'vcb' || (v.prot === 'auto' && v.smax > 1000);
       const ct = U.pick(MV_CT, Itk);
       const sMin = v.ik * 1000 * Math.sqrt(v.tc) / 143;
-      const cab = MV_CABLE.find((c) => c[0] >= Math.max(sMin, 50) && c[1] >= Itk);
+      const myCab = own && (v.ccs > 0 || v.cci > 0);
+      let cab;
+      if (myCab) {
+        const S = v.ccs > 0 ? v.ccs : (MV_CABLE.find((c) => c[0] >= Math.max(sMin, 50) && c[1] >= Itk) || [400])[0];
+        const tab = MV_CABLE.find((c) => c[0] === S);
+        cab = [S, v.cci > 0 ? v.cci : tab ? tab[1] : null];
+      } else cab = MV_CABLE.find((c) => c[0] >= Math.max(sMin, 50) && c[1] >= Itk);
       return {
         tiles: [
-          { l: 'Phương án bảo vệ MBA', v: useVcb ? 'Máy cắt VCB' : 'LBS + cầu chì', main: true, s: useVcb ? 'Rơ le 50/51, 50N/51N; MBA > 1000 kVA' : `Cầu chì ${f(fuse, 1)} A cho MBA ${f(v.smax)} kVA` },
+          { l: 'Phương án bảo vệ MBA', v: useVcb ? 'Máy cắt VCB' : 'LBS + cầu chì', main: true, s: useVcb ? 'Rơ le 50/51, 50N/51N; MBA > 1000 kVA' : `Cầu chì ${f(fuse, 1)} A${myFuse ? ' (theo hãng)' : ''} cho MBA ${f(v.smax)} kVA` },
           { l: 'Cấp điện áp thiết bị', v: f(UM[Ukv], 1), u: 'kV', s: `Lưới ${Ukv} kV` },
           { l: 'Dòng định mức thanh cái / tủ', v: `${Ir}`, u: 'A', s: `Itk = ${f(Itk, 1)} A` },
           { l: 'Dòng chịu ngắn mạch', v: `${f(Ika, 1)} kA / ${f(v.t)} s`, s: `Ip ≥ ${f(Ika * 2.5, 1)} kA đỉnh` },
           { l: 'Tỉ số CT', v: `${ct}/5`, u: 'A', s: 'hoặc /1 A' },
-          { l: 'Cáp trung thế Cu/XLPE', v: cab ? `3 × ${cab[0]}` : '> 400', u: 'mm²', s: `Smin ngắn mạch = ${f(sMin, 1)} mm²` }
+          { l: myCab ? 'Cáp trung thế kiểm tra' : 'Cáp trung thế Cu/XLPE', v: cab ? `3 × ${f(cab[0])}` : '> 400', u: 'mm²', s: myCab ? `Icp = ${cab[1] ? `${f(cab[1], 0)} A` : '— (nhập theo catalogue)'} · Smin = ${f(sMin, 1)} mm²` : `Smin ngắn mạch = ${f(sMin, 1)} mm²` }
         ],
         checks: [
           ['ok', 'Dòng làm việc', `Tổng I = ${f(I, 1)} A; MBA lớn nhất ${f(IT, 1)} A`],
           useVcb ? ['warn', 'Chỉnh định rơ le (sơ bộ)', `51 ≈ 1,2–1,5 × I MBA = ${f(1.2 * IT, 0)}–${f(1.5 * IT, 0)} A; 50 đặt trên dòng xung kích (≈ 10 × I MBA = ${f(10 * IT, 0)} A). Phải tính bảo vệ chính thức.`]
-            : ['warn', 'Cầu chì (sơ bộ)', `1,6–2 × I MBA = ${f(1.6 * IT, 1)}–${f(2 * IT, 1)} A → ${f(fuse, 1)} A; bắt buộc đối chiếu bảng chọn cầu chì của hãng.`],
-          v.smax > 1250 && !useVcb ? ['bad', 'Phương án bảo vệ', 'MBA > 1250 kVA không nên bảo vệ bằng cầu chì – dùng máy cắt.'] : ['ok', 'Phương án bảo vệ', 'Phù hợp công suất MBA.']
-        ],
+            : myFuse ? [fuse > IT ? 'warn' : 'bad', 'Cầu chì theo hãng', fuse > IT ? `${f(fuse, 1)} A > I MBA = ${f(IT, 1)} A; tỉ số ${f(fuse / IT, 2)} – kiểm tra lại với bảng phối hợp cầu chì – MBA của hãng (dòng xung kích, chọn lọc với aptomat hạ thế).` : `${f(fuse, 1)} A ≤ I MBA = ${f(IT, 1)} A – cầu chì chảy khi MBA chạy định mức.`]
+              : ['warn', 'Cầu chì (sơ bộ)', `1,6–2 × I MBA = ${f(1.6 * IT, 1)}–${f(2 * IT, 1)} A → ${f(fuse, 1)} A; bắt buộc đối chiếu bảng chọn cầu chì của hãng.`],
+          v.smax > 1250 && !useVcb ? ['bad', 'Phương án bảo vệ', 'MBA > 1250 kVA không nên bảo vệ bằng cầu chì – dùng máy cắt.'] : ['ok', 'Phương án bảo vệ', 'Phù hợp công suất MBA.'],
+          myCab ? (cab[1] ? [cab[1] >= Itk ? 'ok' : 'bad', 'Dòng cho phép cáp', `${f(cab[1], 0)} A ${cab[1] >= Itk ? '≥' : '<'} Itk = ${f(Itk, 1)} A`] : ['warn', 'Dòng cho phép cáp', `Cỡ ${f(cab[0])} mm² không có trong bảng ước tính – nhập dòng cho phép theo catalogue.`]) : null,
+          myCab ? [cab[0] >= sMin ? 'ok' : 'bad', 'Ổn định nhiệt cáp', `${f(cab[0])} mm² ${cab[0] >= sMin ? '≥' : '<'} Smin = ${f(sMin, 1)} mm² (${f(v.ik)} kA, ${f(v.tc)} s)`] : null
+        ].filter(Boolean),
         steps: [
           ['Dòng làm việc tổng', 'I = ΣS / (√3·U)', `${f(I, 2)} A`],
           ['Dòng thiết kế', 'Itk = I × k', `${f(Itk, 2)} A`],
           ['Dòng MBA lớn nhất', 'IT = Smax / (√3·U)', `${f(IT, 2)} A`],
           ['Cầu chì', 'Icc ≈ 1,6–2 × IT', `${f(fuse, 1)} A`],
           ['Ổn định nhiệt cáp', 'Smin = Ik·√tc / 143 (Cu/XLPE)', `${f(sMin, 1)} mm²`],
-          ['Cáp chọn', 'S ≥ max(Smin; 50) và Icp ≥ Itk', cab ? `${cab[0]} mm² (${cab[1]} A)` : '—']
+          myCab ? ['Cáp tự nhập', 'S, Icp theo catalogue', `${f(cab[0])} mm² (${cab[1] ? `${f(cab[1], 0)} A` : '—'})`] : ['Cáp chọn', 'S ≥ max(Smin; 50) và Icp ≥ Itk', cab ? `${cab[0]} mm² (${cab[1]} A)` : '—']
         ],
         notes: [
           'Tủ RMU/tủ hợp bộ chọn loại thử nghiệm điển hình theo IEC 62271-200, có phân loại hồ quang nội bộ IAC AFL 20 kA 1 s.',
@@ -220,14 +246,17 @@
       { id: 'ta', label: 'Nhiệt độ trong tủ', unit: '°C', value: 45, hint: 'Thường = nhiệt độ phòng + 10 °C' },
       { id: 'mat', label: 'Thanh cái', type: 'sel', value: 'Cu', opts: [['Cu', 'Đồng'], ['Al', 'Nhôm']] },
       { id: 'gen', label: 'Có máy phát dự phòng', type: 'sel', value: 'y', opts: [['y', 'Có – dùng ATS'], ['n', 'Không']] },
-      { id: 'sg', label: 'Công suất máy phát', unit: 'kVA', value: 1000, show: (v) => v.gen === 'y' }
+      { id: 'sg', label: 'Công suất máy phát', unit: 'kVA', value: 1000, show: (v) => v.gen === 'y' },
+      U.cfg('Cách chọn ACB tổng', 'Tự chọn theo dãy chuẩn', 'Tự nhập: kiểm tra ACB có sẵn (In / Ir, Icu)'),
+      { id: 'cacb', label: 'Dòng định mức / chỉnh định ACB', unit: 'A', value: 2500, show: custom, hint: 'ACB chỉnh được: nhập dòng chỉnh định Ir' },
+      { id: 'cicu', label: 'Icu của ACB', unit: 'kA', value: 65, show: custom, hint: 'Theo nhãn / catalogue ở 400–415 V' }
     ],
     basis: {
       std: [
         'Ik thanh cái theo IEC 60909-0 (c = 1,05, hệ số KT), lưới vô cùng lớn, bỏ qua tổng trở cáp MBA – tủ (thiên an toàn).',
         'Thanh cái theo bảng DIN 43671 (sơn, AC, 35 °C / 65 °C) – xem T-04; ổn định nhiệt S ≥ Ik·√t / k, k theo IEC 60865-1.'
       ],
-      assume: ['Thanh N = 100 % pha (có sóng hài), PE ≥ 50 % pha; thời gian ngắn mạch 1 s cho thanh cái.'],
+      assume: ['Thanh N = 100 % pha (có sóng hài), PE ≥ 50 % pha; thời gian ngắn mạch 1 s cho thanh cái.', 'Chế độ kiểm tra ACB có sẵn: In ≥ Itk là Đạt, I MBA ≤ In < Itk là Lưu ý; Icu ≥ Ik × k là Đạt, Ik ≤ Icu < Ik × k là Lưu ý. Thanh cái vẫn chọn theo Itk – cấu hình riêng tính ở T-04.'],
       verify: [
         'Tủ tổng phải là tủ thử nghiệm điển hình theo IEC 61439-1/2; đối chiếu kích thước thanh cái với hồ sơ của nhà chế tạo tủ.',
         'Đối chiếu ACB, Icu với catalogue hãng.'
@@ -236,17 +265,19 @@
     calc(v, k) {
       guard(!(v.s > 0 && v.uk > 0 && v.u > 0), 'Công suất, Uk và điện áp phải lớn hơn 0.');
       const I = v.s * 1000 / (SQ3 * v.u), Itk = I * k;
-      const acb = U.pick(U.STD.breaker, Itk);
-      guard(!acb, 'Dòng vượt 6300 A – chia thành 2 phân đoạn thanh cái.');
+      const own = custom(v);
+      guard(own && !(v.cacb > 0 && v.cicu > 0), 'Dòng định mức và Icu của ACB tự nhập phải lớn hơn 0.');
+      const acb = own ? v.cacb : U.pick(U.STD.breaker, Itk);
+      guard(!acb, `Dòng thiết kế ${f(Itk, 0)} A vượt ACB lớn nhất 6300 A – chia thành 2 phân đoạn thanh cái (2 MBA), hoặc chọn "Kiểm tra ACB có sẵn".`);
       const Ik = U.ikTrafo(v.s, v.uk, v.u).Ik;
-      const icu = U.pick(U.STD.icu, Ik * k);
+      const icu = own ? v.cicu : U.pick(U.STD.icu, Ik * k);
       const ct = U.pick(U.STD.ct, Itk);
       const bb = busbar(Itk, { mat: v.mat, ta: v.ta, max: 4 });
       const bbN = busbar(Itk * 0.5, { mat: v.mat, ta: v.ta, max: 4 });
       const kth = bbK(v.mat, 65);
       const fMin = Ik * 1000 * 1 / kth;
       const tiles = [
-        { l: 'Aptomat tổng', v: `ACB ${acb}`, u: 'A', main: true, s: `${v.u === 400 ? '4P' : '3P'} · Icu ≥ ${icu || '>150'} kA · bảo vệ LSIG` },
+        { l: own ? 'ACB tổng kiểm tra' : 'Aptomat tổng', v: `ACB ${own ? f(acb) : acb}`, u: 'A', main: true, s: own ? `Icu = ${f(icu)} kA · yêu cầu ≥ ${f(Ik * k, 1)} kA · tự nhập` : `${v.u === 400 ? '4P' : '3P'} · Icu ≥ ${icu || '>150'} kA · bảo vệ LSIG` },
         { l: 'Dòng định mức MBA', v: f(I, 0), u: 'A', s: `Itk = ${f(Itk, 0)} A` },
         { l: 'Ik tại thanh cái', v: f(Ik, 1), u: 'kA', s: 'IEC 60909, lưới vô cùng lớn' },
         { l: 'Biến dòng đo lường', v: `${ct}/5`, u: 'A', s: 'Cấp 0,5 cho đồng hồ đa năng' },
@@ -259,9 +290,14 @@
         const ats = U.pick(U.STD.breaker, Math.max(Itk, Ig * k));
         tiles.push({ l: 'ATS chuyển nguồn', v: `${ats}`, u: 'A', s: `4 cực · máy phát ${f(Ig, 0)} A` });
       }
+      const own1 = own ? [
+        [acb >= Itk ? 'ok' : acb >= I ? 'warn' : 'bad', 'Dòng định mức ACB', acb >= Itk ? `${f(acb)} A ≥ Itk = ${f(Itk, 0)} A` : acb >= I ? `${f(acb)} A ≥ I MBA = ${f(I, 0)} A nhưng < Itk = ${f(Itk, 0)} A (chưa đủ hệ số k)` : `${f(acb)} A < I MBA = ${f(I, 0)} A – không khai thác hết công suất MBA`],
+        [icu >= Ik * k ? 'ok' : icu >= Ik ? 'warn' : 'bad', 'Khả năng cắt ACB', icu >= Ik * k ? `Icu = ${f(icu)} kA ≥ Ik × k = ${f(Ik * k, 1)} kA` : icu >= Ik ? `Icu = ${f(icu)} kA ≥ Ik = ${f(Ik, 1)} kA nhưng < Ik × k = ${f(Ik * k, 1)} kA` : `Icu = ${f(icu)} kA < Ik = ${f(Ik, 1)} kA – không cắt được ngắn mạch`]
+      ] : [];
       return {
         tiles,
         checks: [
+          ...own1,
           [bb.pick && bb.pick.A >= fMin ? 'ok' : 'bad', 'Ổn định nhiệt thanh cái', `${bb.pick ? f(bb.pick.A) : '—'} mm² ≥ Ik·√t / k = ${f(fMin, 0)} mm² (t = 1 s, k = ${f(kth, 0)})`],
           ...(bb.pick && bb.pick.n === 4 ? [['warn', 'Thanh cái 4 thanh/pha', 'Giá trị bảng 4 thanh đã lấy thận trọng nhưng chưa đối chiếu được nguồn ngoài – kiểm tra theo hồ sơ nhà chế tạo tủ.']] : []),
           [v.ta > 40 ? 'warn' : 'ok', 'Nhiệt độ trong tủ', v.ta > 40 ? `${f(v.ta)} °C: kiểm tra hệ số giảm tải ACB theo catalogue, cân nhắc quạt thông gió tủ.` : 'Trong giới hạn chuẩn.'],
@@ -270,9 +306,9 @@
         steps: [
           ['Dòng định mức thứ cấp', 'I = S / (√3·U)', `${f(I, 1)} A`],
           ['Dòng thiết kế', 'Itk = I × k', `${f(Itk, 1)} A`],
-          ['ACB', 'In ≥ Itk', `${acb} A`],
+          own ? ['ACB tự nhập', 'In / Ir (nhập)', `${f(acb)} A`] : ['ACB', 'In ≥ Itk', `${acb} A`],
           ['Ngắn mạch thanh cái', 'Ik = c·Un / (√3·KT·ZT)', `${f(Ik, 2)} kA`],
-          ['Khả năng cắt', 'Icu ≥ Ik × k', `${icu} kA`],
+          ['Khả năng cắt', 'Icu ≥ Ik × k', `${icu ? f(icu) : '> 150'} kA`],
           ['Hiệu chỉnh nhiệt thanh cái', `((65 − ${f(v.ta)}) / 30)^${65 - v.ta < 30 ? '0,6' : '0,54'}`, f(bb.kT, 3)]
         ],
         notes: [
@@ -426,7 +462,15 @@
       { id: 'mode', label: 'Chế độ chọn', type: 'sel', value: 'prime', opts: [['prime', 'Prime – chạy liên tục'], ['standby', 'Standby – dự phòng mất điện']] },
       { id: 'h', label: 'Thời gian chạy liên tục', unit: 'giờ', value: 8 },
       { id: 'lf', label: 'Mức tải trung bình', unit: '%', value: 75 },
-      { id: 'sfc', label: 'Suất tiêu hao dầu', unit: 'L/kWh', value: 0.24, hint: 'Lấy theo catalogue động cơ máy phát ở mức tải tương ứng' }
+      { id: 'sfc', label: 'Suất tiêu hao dầu', unit: 'L/kWh', value: 0.24, hint: 'Lấy theo catalogue động cơ máy phát ở mức tải tương ứng' },
+      U.cfg('Cách chọn máy phát', 'Tự chọn 1 máy (đến 3000 kVA)', 'Tự nhập: nhiều máy song song, công suất máy, thông số động cơ, điện áp'),
+      { id: 'cn', label: 'Số máy phát chạy song song', value: 1, show: custom, hint: 'Các máy hòa đồng bộ cùng gánh tải; tool chia đều công suất' },
+      { id: 'cs', label: 'Công suất mỗi máy', unit: 'kVA', value: 0, show: custom, hint: '0 = tool chọn theo dãy chuẩn. Nhập đúng định mức của chế độ đã chọn (Prime hoặc Standby)' },
+      { id: 'cm', label: 'Bội số dòng khởi động động cơ lớn nhất', unit: '× In', value: 0, show: custom, hint: '0 = điển hình theo cách khởi động (DOL 7; Y–Δ 2,3; mềm 3,5; biến tần 1,5)' },
+      { id: 'cmeta', label: 'Hiệu suất động cơ lớn nhất', value: 0.92, show: custom },
+      { id: 'cmcos', label: 'cosφ động cơ lớn nhất', value: 0.86, show: custom },
+      { id: 'cu', label: 'Điện áp máy phát', unit: 'V', value: 400, show: custom },
+      { id: 'cpf', label: 'Hệ số công suất định mức máy phát', value: 0.8, show: custom, hint: 'ISO 8528: thường 0,8' }
     ],
     basis: {
       std: [
@@ -435,7 +479,8 @@
       ],
       assume: [
         'Động cơ lớn nhất chạy với η = 0,92, cosφ = 0,86; bội số khởi động như Đ-05.',
-        `Cáp ra máy phát chọn nhanh theo aptomat: ${U.QUICK_NOTE}.`
+        `Cáp ra máy phát chọn nhanh theo aptomat: ${U.QUICK_NOTE}.`,
+        'Chế độ tự nhập: nhiều máy chạy song song chia đều tải; sụt áp khi khởi động tính với tổng công suất các máy đang chạy (X″d tương đương không đổi).'
       ],
       verify: [
         'Kiểm khả năng khởi động động cơ (SkVA ở 20 % sụt áp) bằng phần mềm chọn máy của hãng (Cummins, CAT, Kohler…).',
@@ -445,51 +490,65 @@
     calc(v, k) {
       guard(!(v.dv > 0 && v.dv < 100), 'Sụt áp cho phép phải trong khoảng 0–100 %.');
       guard(!(v.p > 0 && v.cos > 0 && v.cos <= 1), 'Tải phải lớn hơn 0 và cosφ trong khoảng 0–1.');
+      const own = custom(v);
+      const n = own ? Math.round(v.cn) : 1;
+      const meta = own ? v.cmeta : 0.92, mcos = own ? v.cmcos : 0.86;
+      const Ug = own ? v.cu : 400, pf = own ? v.cpf : 0.8;
+      guard(own && !(n >= 1 && v.cs >= 0 && v.cm >= 0 && meta > 0 && meta <= 1 && mcos > 0 && mcos <= 1 && Ug > 0 && pf > 0 && pf <= 1),
+        'Số máy phải ≥ 1; hiệu suất, cosφ, hệ số công suất trong khoảng 0–1; công suất, điện áp không được âm.');
       const Srun = v.p * v.kdt / v.cos;
-      const Sm = v.pm / (0.92 * 0.86);
-      const Sst = Sm * GEN_START[v.st][1];
+      const Sm = v.pm / (meta * mcos);
+      const mult = own && v.cm > 0 ? v.cm : GEN_START[v.st][1];
+      const Sst = Sm * mult;
       const dv = v.dv / 100;
       const Sgs = Sst * v.xd * (1 - dv) / dv;
-      const Sreq = Math.max(Srun * (1 + v.dp / 100), Sgs) * k;
-      const Sg = U.pick(U.STD.gen, Sreq);
-      guard(!Sg, 'Công suất vượt 3000 kVA – dùng nhiều máy phát hòa đồng bộ.');
+      const Sreq = Math.max(Srun * (1 + v.dp / 100), Sgs) * k;     // tổng các máy chạy song song
+      const per = Sreq / n;
+      const mine = own && v.cs > 0;
+      const Sg = mine ? v.cs : U.pick(U.STD.gen, per);
+      guard(!Sg, `Cần ${f(per, 0)} kVA mỗi máy, vượt dãy chuẩn 3000 kVA – chọn "Tự nhập" để tăng số máy phát chạy song song hoặc nhập máy lớn hơn.`);
       const prime = v.mode === 'prime' ? Sg : Sg / 1.1;
       const standby = v.mode === 'prime' ? Sg * 1.1 : Sg;
-      const kw = prime * 0.8;
-      const lph = kw * v.lf / 100 * v.sfc;
+      const kw = prime * pf;
+      const lph = n * kw * v.lf / 100 * v.sfc;
       const tank = lph * v.h * 1.1;
-      const Ig = Sg * 1000 / (SQ3 * 400);
+      const Ig = Sg * 1000 / (SQ3 * Ug);
       const brk = U.pick(U.STD.breaker, Ig);
       const cab = U.cableQuick(brk || Ig);
-      const load = Srun / prime;
+      const load = Srun / (n * prime);
+      const SgTxt = mine ? f(Sg) : `${Sg}`;
+      const checks = [];
+      if (mine) checks.push([n * Sg >= Sreq ? 'ok' : 'bad', 'Công suất máy phát tự nhập', `${n > 1 ? `${n} × ${SgTxt} = ${f(n * Sg)}` : SgTxt} kVA ${n * Sg >= Sreq ? '≥' : '<'} yêu cầu ${f(Sreq, 0)} kVA`]);
+      checks.push([load >= 0.3 ? 'ok' : 'warn', 'Mức tải vận hành', `≈ ${f(load * 100, 0)} %${load < 0.3 ? ' – dưới 30 % dễ đóng muội (wet stacking), cần tải giả khi chạy thử' : ''}`]);
+      checks.push([Sgs <= Srun * (1 + v.dp / 100) ? 'ok' : 'warn', 'Yếu tố quyết định công suất', Sgs > Srun * (1 + v.dp / 100) ? 'Do khởi động động cơ – đổi sang khởi động mềm/biến tần để giảm cỡ máy.' : 'Do tải chạy.']);
+      if (n > 1) checks.push(['warn', 'Chạy song song', `${n} máy hòa đồng bộ: cần tủ hòa, bộ chia tải; khi 1 máy sự cố, ${n - 1} máy còn lại gánh ${f((n - 1) * Sg)} kVA – cắt bớt tải không ưu tiên hoặc thêm 1 máy dự phòng (N+1).`]);
+      checks.push(['ok', 'Khởi động tuần tự', 'Đóng động cơ lớn nhất trước, các tải khác cách nhau 5–10 s.']);
       return {
         tiles: [
-          { l: `Máy phát chọn (${v.mode === 'prime' ? 'Prime' : 'Standby'})`, v: `${Sg}`, u: 'kVA', main: true, s: `Prime ≈ ${f(prime, 0)} kVA / ${f(kw, 0)} kW · Standby ≈ ${f(standby, 0)} kVA` },
+          { l: `Máy phát ${mine ? 'kiểm tra' : 'chọn'} (${v.mode === 'prime' ? 'Prime' : 'Standby'})`, v: n > 1 ? `${n} × ${SgTxt}` : SgTxt, u: 'kVA', main: true, s: `${n > 1 ? 'Mỗi máy: ' : ''}Prime ≈ ${f(prime, 0)} kVA / ${f(kw, 0)} kW · Standby ≈ ${f(standby, 0)} kVA` },
           { l: 'Tải chạy Srun', v: f(Srun, 0), u: 'kVA' },
-          { l: 'Yêu cầu do khởi động', v: f(Sgs, 0), u: 'kVA', s: `Sst động cơ = ${f(Sst, 0)} kVA` },
-          { l: 'Tiêu hao nhiên liệu', v: f(lph, 0), u: 'L/h', s: `tại ${f(v.lf)} % tải` },
+          { l: 'Yêu cầu do khởi động', v: f(Sgs, 0), u: 'kVA', s: `Sst động cơ = ${f(Sst, 0)} kVA (${f(mult, 2)} × In)` },
+          { l: 'Tiêu hao nhiên liệu', v: f(lph, 0), u: 'L/h', s: `tại ${f(v.lf)} % tải${n > 1 ? `, ${n} máy` : ''}` },
           { l: 'Bồn dầu ngày', v: f(tank, 0), u: 'L', s: `${f(v.h)} giờ + 10 % đáy bồn` },
-          { l: 'Aptomat đầu cực / ATS', v: `${brk}`, u: 'A', s: `Iđm máy phát = ${f(Ig, 0)} A` },
+          { l: n > 1 ? 'Aptomat đầu cực mỗi máy' : 'Aptomat đầu cực / ATS', v: brk ? `${brk}` : '> 6300', u: 'A', s: `Iđm máy phát = ${f(Ig, 0)} A ở ${f(Ug)} V` },
+          n > 1 ? { l: 'Dòng tổng thanh cái hòa', v: f(n * Ig, 0), u: 'A', s: 'Chọn ATS, thanh cái theo dòng này' } : null,
           { l: 'Cáp ra máy phát', v: U.cableTxt(cab), s: `Cu/XLPE chịu được aptomat · ${U.QUICK_NOTE}` }
-        ],
-        checks: [
-          [load >= 0.3 ? 'ok' : 'warn', 'Mức tải vận hành', `≈ ${f(load * 100, 0)} %${load < 0.3 ? ' – dưới 30 % dễ đóng muội (wet stacking), cần tải giả khi chạy thử' : ''}`],
-          [Sgs <= Srun * (1 + v.dp / 100) ? 'ok' : 'warn', 'Yếu tố quyết định công suất', Sgs > Srun * (1 + v.dp / 100) ? 'Do khởi động động cơ – đổi sang khởi động mềm/biến tần để giảm cỡ máy.' : 'Do tải chạy.'],
-          ['ok', 'Khởi động tuần tự', 'Đóng động cơ lớn nhất trước, các tải khác cách nhau 5–10 s.']
-        ],
+        ].filter(Boolean),
+        checks,
         steps: [
           ['Tải chạy', 'Srun = ΣP × Kđt / cosφ', `${f(Srun, 1)} kVA`],
-          ['Động cơ lớn nhất khi chạy', 'Sm = P / (η·cosφ), η = 0,92, cosφ = 0,86', `${f(Sm, 1)} kVA`],
-          ['Công suất khởi động', `Sst = Sm × ${GEN_START[v.st][1]}`, `${f(Sst, 1)} kVA`],
+          ['Động cơ lớn nhất khi chạy', `Sm = P / (η·cosφ), η = ${f(meta, 2)}, cosφ = ${f(mcos, 2)}`, `${f(Sm, 1)} kVA`],
+          ['Công suất khởi động', `Sst = Sm × ${f(mult, 2)}`, `${f(Sst, 1)} kVA`],
           ['Theo sụt áp khởi động', "Sg ≥ Sst·X''d·(1 − ΔU)/ΔU", `${f(Sgs, 1)} kVA`],
           ['Công suất yêu cầu', 'max(Srun·(1+dp); Sg) × k', `${f(Sreq, 1)} kVA`],
-          ['Nhiên liệu', 'Q = P·tải%·suất tiêu hao', `${f(lph, 1)} L/h`]
-        ],
+          n > 1 ? ['Mỗi máy', `S ≥ Sreq / ${n}`, `${f(per, 1)} kVA`] : null,
+          ['Nhiên liệu', `Q = ${n > 1 ? 'n·' : ''}P·tải%·suất tiêu hao, P = ${f(pf, 2)} × kVA Prime`, `${f(lph, 1)} L/h`]
+        ].filter(Boolean),
         notes: [
           'Standby chỉ dùng khi mất điện lưới, tải trung bình ≤ 70 %, không quá 200 giờ/năm (ISO 8528). Chạy thay lưới thường xuyên phải chọn theo Prime.',
           'Tải phi tuyến (biến tần) > 30 %: chọn máy phát có kích từ PMG và tăng công suất 15–25 %.'
         ],
-        raw: { Srun, Sm, Sst, Sgs, Sreq, Sg, prime, lph, tank, Ig, brk }
+        raw: { Srun, Sm, Sst, Sgs, Sreq, n, Sg, prime, lph, tank, Ig, brk }
       };
     }
   });
@@ -518,7 +577,10 @@
       { id: 'd', label: 'Đường kính cọc', unit: 'mm', value: 16, hint: 'Cọc thép mạ đồng D16; thép góc cạnh b quy đổi d ≈ 0,95·b' },
       { id: 'h0', label: 'Độ chôn sâu đỉnh cọc', unit: 'm', value: 0.8 },
       { id: 'a', label: 'Khoảng cách giữa các cọc', unit: 'm', value: 5 },
-      { id: 'ryc', label: 'Điện trở yêu cầu', unit: 'Ω', value: 4, hint: 'Trạm, trung tính: ≤ 4 Ω; chống sét (TCVN 9385:2012): ≤ 10 Ω; thiết bị điện tử theo nhà sản xuất' }
+      { id: 'ryc', label: 'Điện trở yêu cầu', unit: 'Ω', value: 4, hint: 'Trạm, trung tính: ≤ 4 Ω; chống sét (TCVN 9385:2012): ≤ 10 Ω; thiết bị điện tử theo nhà sản xuất' },
+      U.cfg('Cách bố trí cọc', 'Một hàng, tool tự tính số cọc', 'Tự nhập: số cọc bất kỳ, hệ số sử dụng (mạch vòng, lưới)'),
+      { id: 'cn', label: 'Số cọc', value: 10, show: custom, hint: 'Không giới hạn 20 cọc khi nhập hệ số sử dụng' },
+      { id: 'ceta', label: 'Hệ số sử dụng η', value: 0, show: custom, hint: '0 = tra bảng một hàng (≤ 20 cọc). Mạch vòng, lưới: lấy theo sổ tay thiết kế' }
     ],
     basis: {
       std: [
@@ -527,7 +589,8 @@
       ],
       assume: [
         'Hệ số sử dụng lấy cận dưới của bảng, bỏ qua phần thanh nối nằm ngang (kết quả thiên an toàn).',
-        'Tối đa 20 cọc một hàng; cần nhiều hơn phải chuyển sang mạch vòng / lưới tiếp địa.'
+        'Tối đa 20 cọc một hàng; cần nhiều hơn phải chuyển sang mạch vòng / lưới tiếp địa.',
+        'Chế độ tự nhập: dùng số cọc và hệ số sử dụng do người dùng nhập (mạch vòng, lưới, nhiều hàng); vẫn bỏ qua phần thanh nối nằm ngang.'
       ],
       verify: [
         'Đo điện trở suất đất trước thiết kế và đo điện trở nối đất sau thi công bằng phương pháp 3 cực, vào mùa khô.',
@@ -537,27 +600,37 @@
     calc(v, k) {
       guard(v.L <= 0 || v.d <= 0 || v.a <= 0 || v.rho <= 0 || v.ryc <= 0, 'Số liệu phải lớn hơn 0.');
       guard(v.h0 < 0, 'Độ chôn sâu không được âm.');
+      const own = custom(v);
       const ratio = v.a / v.L;
-      guard(ratio < 1, 'Khoảng cách giữa các cọc phải ≥ chiều dài cọc (ngoài bảng hệ số sử dụng).');
+      const myEta = own && v.ceta > 0;
+      guard(!myEta && ratio < 1, 'Khoảng cách giữa các cọc phải ≥ chiều dài cọc (ngoài bảng hệ số sử dụng) – hoặc chọn "Tự nhập" và nhập hệ số sử dụng η.');
       const dm = v.d / 1000, t = v.h0 + v.L / 2;
       const R1 = v.rho * v.km / (2 * Math.PI * v.L) * (Math.log(2 * v.L / dm) + 0.5 * Math.log((4 * t + v.L) / (4 * t - v.L)));
       const target = v.ryc / k;
       let n = 1, eta = 1, Rn = R1;
-      while (Rn > target && n < 20) { n++; eta = etaOf(n, ratio); Rn = R1 / (n * eta); }
+      if (own) {
+        n = Math.round(v.cn);
+        guard(!(n >= 1) || !(v.ceta >= 0 && v.ceta <= 1), 'Số cọc phải ≥ 1, hệ số sử dụng trong khoảng 0–1.');
+        eta = myEta ? v.ceta : etaOf(n, ratio);
+        guard(eta == null, `${n} cọc vượt bảng hệ số sử dụng một hàng (tối đa 20) – nhập hệ số sử dụng η theo sổ tay cho cách bố trí thực tế.`);
+        Rn = R1 / (n * eta);
+      } else while (Rn > target && n < 20) { n++; eta = etaOf(n, ratio); Rn = R1 / (n * eta); }
       const ok = Rn <= target;
       const dwight = v.rho * v.km / (2 * Math.PI * v.L) * Math.log(4 * v.L / dm);
       return {
         tiles: [
-          { l: 'Số cọc cần thiết', v: ok ? `${n}` : '> 20', u: 'cọc', main: true, s: ok ? `Cọc ${f(v.L, 1)} m, cách nhau ${f(v.a, 1)} m, một hàng · R ≈ ${f(Rn, 2)} Ω` : 'Một hàng 20 cọc chưa đạt – chuyển sang mạch vòng / lưới' },
+          own ? { l: 'Điện trở hệ cọc tự nhập', v: f(Rn, 2), u: 'Ω', main: true, s: `${n} cọc ${f(v.L, 1)} m · η = ${f(eta, 2)}${myEta ? ' (nhập)' : ' (bảng một hàng)'} · ${ok ? 'đạt' : 'chưa đạt'} mục tiêu ${f(target, 2)} Ω` }
+            : { l: 'Số cọc cần thiết', v: ok ? `${n}` : '> 20', u: 'cọc', main: true, s: ok ? `Cọc ${f(v.L, 1)} m, cách nhau ${f(v.a, 1)} m, một hàng · R ≈ ${f(Rn, 2)} Ω` : 'Một hàng 20 cọc chưa đạt – chuyển sang mạch vòng / lưới' },
           { l: 'Điện trở 1 cọc', v: f(R1, 2), u: 'Ω', s: `Kiểm nhanh Dwight: ${f(dwight, 2)} Ω` },
           { l: 'Điện trở mục tiêu', v: f(target, 2), u: 'Ω', s: `= ${f(v.ryc)} / ${f(k, 2)}` },
           { l: 'Hệ số sử dụng η', v: f(eta, 2), s: `a/L = ${f(ratio, 2)}` },
-          { l: 'Dây nối (bố trí 1 hàng)', v: f((n - 1) * v.a, 1), u: 'm', s: 'Cáp đồng trần ≥ 50 mm² hoặc thép dẹt 40×4' }
-        ],
+          own ? null : { l: 'Dây nối (bố trí 1 hàng)', v: f((n - 1) * v.a, 1), u: 'm', s: 'Cáp đồng trần ≥ 50 mm² hoặc thép dẹt 40×4' }
+        ].filter(Boolean),
         checks: [
-          [ok ? 'ok' : 'bad', 'Điện trở hệ thống', ok ? `${f(Rn, 2)} Ω ≤ ${f(target, 2)} Ω` : `Với 20 cọc R = ${f(Rn, 2)} Ω > ${f(target, 2)} Ω – dùng mạch vòng/lưới, cọc sâu (khoan giếng) hoặc hóa chất giảm điện trở; tính lại theo phương pháp lưới.`],
-          [ratio >= 2 ? 'ok' : 'warn', 'Khoảng cách cọc', ratio >= 2 ? 'Khoảng cách ≥ 2 lần chiều dài cọc.' : 'Khoảng cách < 2L làm giảm hiệu quả – tăng khoảng cách nếu mặt bằng cho phép.']
-        ],
+          [ok ? 'ok' : 'bad', 'Điện trở hệ thống', ok ? `${f(Rn, 2)} Ω ≤ ${f(target, 2)} Ω` : own ? `${n} cọc: R = ${f(Rn, 2)} Ω > ${f(target, 2)} Ω – tăng số cọc, cọc dài hơn hoặc khoảng cách lớn hơn.` : `Với 20 cọc R = ${f(Rn, 2)} Ω > ${f(target, 2)} Ω – dùng mạch vòng/lưới, cọc sâu (khoan giếng) hoặc hóa chất giảm điện trở; tính lại theo phương pháp lưới.`],
+          [ratio >= 2 ? 'ok' : 'warn', 'Khoảng cách cọc', ratio >= 2 ? 'Khoảng cách ≥ 2 lần chiều dài cọc.' : 'Khoảng cách < 2L làm giảm hiệu quả – tăng khoảng cách nếu mặt bằng cho phép.'],
+          myEta ? ['warn', 'Hệ số sử dụng tự nhập', 'Ghi rõ nguồn của η (sổ tay, cách bố trí mạch vòng/lưới); đo điện trở thực tế sau thi công.'] : null
+        ].filter(Boolean),
         steps: [
           ['Độ sâu tâm cọc', 't = h0 + L/2', `${f(t, 2)} m`],
           ['Điện trở 1 cọc', 'R1 = ρ·Km/(2πL)·[ln(2L/d) + ½·ln((4t+L)/(4t−L))]', `${f(R1, 3)} Ω`],
