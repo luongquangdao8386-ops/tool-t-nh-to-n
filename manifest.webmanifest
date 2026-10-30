@@ -1,7 +1,7 @@
 {
-  "name": "Tính toán cơ điện",
-  "short_name": "Cơ điện",
-  "description": "Bộ tính toán cơ điện cho nhà máy giấy bao bì.",
+  "name": "EMT",
+  "short_name": "EMT",
+  "description": "EMT – bộ công cụ tính toán cơ điện.",
   "lang": "vi",
   "start_url": "./",
   "scope": "./",

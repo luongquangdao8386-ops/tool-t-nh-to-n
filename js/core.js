@@ -121,7 +121,7 @@
   };
   const icon = (n) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${P[n] || P.calc}</svg>`;
   const MARK = '<span class="brandmark"><svg viewBox="0 0 36 36" fill="none" aria-hidden="true"><path d="M7 12.5 18 6l11 6.5V24L18 30 7 24V12.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m7 12.5 11 6 11-6M18 18.5V30" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m19.5 8-6 9h5l-2 8 8-11h-5l.5-6Z" fill="currentColor" stroke="#F5C400" stroke-width="1.2" stroke-linejoin="round"/></svg></span>';
-  const BRAND = `<a class="brand" href="#tong-quan" aria-label="Tính toán cơ điện — Trang tổng quan">${MARK}<span><span class="brand-name">Tính toán cơ điện</span><span class="brand-subtitle">NHÀ MÁY GIẤY BAO BÌ</span></span></a>`;
+  const BRAND = `<a class="brand" href="#tong-quan" aria-label="EMT — Trang tổng quan">${MARK}<span class="brand-name">EMT</span></a>`;
   const PAPER = '<svg class="paper-icon" viewBox="0 0 170 90" fill="none" aria-hidden="true"><path d="M14 63h139M28 56V31l32 14V27l32 15V17h25v39M100 18V8h8v10M40 51h7m18 0h7m18 0h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="m22 76 63 7 64-7m-127-7 63 7 64-7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="133" cy="47" r="16" fill="white" stroke="currentColor" stroke-width="1.4"/><circle cx="133" cy="47" r="8" stroke="currentColor" stroke-width="1.4"/><circle cx="133" cy="47" r="2" fill="currentColor"/></svg>';
   const CABLE_DRAWING = '<svg class="cable-drawing" viewBox="0 0 100 100" fill="none" aria-hidden="true"><path d="m52 21 27 15c10 6 16 18 13 30-4 15-23 23-36 15L29 66" stroke="currentColor" stroke-width="1.2"/><ellipse cx="40" cy="45" rx="26" ry="28" transform="rotate(-28 40 45)" stroke="currentColor" stroke-width="1.5"/><ellipse cx="40" cy="45" rx="21" ry="23" transform="rotate(-28 40 45)" stroke="currentColor" stroke-width="1"/><ellipse cx="39" cy="34" rx="7" ry="8" transform="rotate(-28 39 34)" stroke="currentColor" stroke-width="1.2"/><ellipse cx="30" cy="49" rx="7" ry="8" transform="rotate(-28 30 49)" stroke="currentColor" stroke-width="1.2"/><ellipse cx="49" cy="51" rx="7" ry="8" transform="rotate(-28 49 51)" stroke="currentColor" stroke-width="1.2"/><path d="m57 31 26 15M62 52l28 16M45 70l24 14" stroke="currentColor" stroke-width="1"/></svg>';
 
@@ -481,7 +481,7 @@
     $('#app').innerHTML = header() + `<div class="app-layout">${sidebar()}${m ? calcView(m) : view === 'verify' ? verifyView() : homeView()}</div>`;
     document.querySelectorAll('[data-menu]').forEach((e) => e.addEventListener('click', openMenu));
     document.querySelectorAll('[data-home]').forEach((e) => e.addEventListener('click', () => { location.hash = 'tong-quan'; }));
-    document.title = m ? `${m.code} ${m.title} · Tính toán cơ điện` : view === 'verify' ? 'Kiểm chứng · Tính toán cơ điện' : 'Tính toán cơ điện';
+    document.title = m ? `${m.code} ${m.title} · EMT` : view === 'verify' ? 'Kiểm chứng · EMT' : 'EMT';
     if (m) { bindCalc(m); renderResult(m); window.scrollTo(0, 0); }
     else if (view === 'verify') { window.scrollTo(0, 0); }
     else {

@@ -1,4 +1,4 @@
-# Tính toán cơ điện
+# EMT – Tính toán cơ điện
 
 Bộ công cụ hỗ trợ tính toán cơ điện cho nhà máy giấy bao bì. Trang web tĩnh (HTML/CSS/JS thuần), không cần máy chủ, không liên kết với ứng dụng nào khác. Mở `index.html` bằng trình duyệt là dùng được, kể cả khi mất mạng.
 
