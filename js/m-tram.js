@@ -6,36 +6,47 @@
   const guard = (cond, msg) => { if (cond) throw new Error(msg); };
 
   // ---------- Thanh cái đồng chữ nhật, AC 50 Hz – DIN 43671 (môi trường 35 °C, thanh 65 °C) ----------
-  // [rộng, dày, 1 thanh có sơn, 2 thanh có sơn, 3 thanh có sơn, 1 thanh để trần] – A mỗi pha.
+  // [rộng, dày, 1 thanh có sơn, 2 thanh có sơn, 3 thanh có sơn, 4 thanh có sơn (bố trí 2 cặp II II; null = bảng không có), 1 thanh để trần] – A mỗi pha.
   // Thanh để trần nhiều thanh: lấy theo tỉ lệ trần/sơn của 1 thanh.
   const BB = [
-    [20, 5, 319, 560, 728, 274], [25, 5, 384, 692, 865, 327], [30, 5, 447, 760, 1050, 379], [40, 5, 573, 952, 1330, 482],
-    [50, 5, 697, 1140, 1580, 583], [60, 5, 826, 1330, 1830, 688], [80, 5, 1070, 1680, 2280, 885], [100, 5, 1300, 2010, 2720, 1080],
-    [30, 10, 676, 1200, 1600, 573], [40, 10, 850, 1470, 2000, 715], [50, 10, 1020, 1720, 2380, 852], [60, 10, 1180, 1960, 2730, 985],
-    [80, 10, 1500, 2410, 3310, 1240], [100, 10, 1810, 2860, 3900, 1490], [120, 10, 2110, 3280, 4460, 1740]
+    [20, 5, 319, 560, 728, null, 274], [25, 5, 384, 692, 865, null, 327], [30, 5, 447, 760, 1050, null, 379], [40, 5, 573, 952, 1330, null, 482],
+    [50, 5, 697, 1140, 1580, null, 583], [60, 5, 826, 1330, 1830, null, 688], [80, 5, 1070, 1680, 2280, null, 885], [100, 5, 1300, 2010, 2720, null, 1080],
+    [30, 10, 676, 1200, 1600, null, 573], [40, 10, 850, 1470, 2000, null, 715], [50, 10, 1020, 1720, 2380, null, 852], [60, 10, 1180, 1960, 2730, 3800, 985],
+    [80, 10, 1500, 2410, 3310, 4800, 1240], [100, 10, 1810, 2860, 3900, 5600, 1490], [120, 10, 2110, 3280, 4460, 6400, 1740],
+    [160, 10, 2700, 4130, 5450, 7600, 2220], [200, 10, 3290, 4970, 6370, 9000, 2690]
   ];
-  // Hiệu chỉnh nhiệt độ (θcp − θ)/30 mũ 0,6 khi ΔT < 30 K, mũ 0,54 khi ΔT ≥ 30 K (lấy giá trị thấp hơn của hai cách tính)
+  // 4 thanh/pha: lấy thận trọng, không vượt 0,9 × 2 × giá trị 2 thanh (hai cặp đặt cách nhau có sưởi nóng lẫn nhau)
+  const bbPainted = (b, n) => (n === 4 ? (b[5] ? Math.min(b[5], 0.9 * 2 * b[3]) : null) : b[1 + n]);
+  function bbBase(b, n, surf) {
+    if (n < 1 || n > 4) return null;
+    const p = bbPainted(b, n);
+    if (!p) return null;
+    return surf === 'paint' ? p : p * b[6] / b[2];
+  }
+  // Hiệu chỉnh nhiệt độ (θcp − θ)/30 mũ 0,6 khi ΔT < 30 K, mũ 0,54 khi ΔT ≥ 30 K (khớp bảng Siemens 573 / 756 / 900 A ở 65 / 85 / 105 °C)
   const bbTempK = (tb, ta) => { const r = Math.max(tb - ta, 0) / 30; return Math.pow(r, r < 1 ? 0.6 : 0.54); };
   // Ổn định nhiệt thanh cái trần: k = K·√ln((θf + β)/(θi + β)), Cu K = 226, β = 234,5; Al K = 148, β = 228; θf = 200 °C
   const bbK = (mat, ti, tf = 200) => (mat === 'Al' ? 148 * Math.sqrt(Math.log((tf + 228) / (ti + 228))) : 226 * Math.sqrt(Math.log((tf + 234.5) / (ti + 234.5))));
   const K_BB_AL = 0.78;   // nhôm so với đồng cùng kích thước (DIN 43670 cho ≈ 0,80–0,82)
 
-  // Chọn thanh cái có tổng tiết diện nhỏ nhất thỏa dòng yêu cầu (ưu tiên ít thanh hơn khi bằng nhau)
+  // Liệt kê các cấu hình trong bảng; chọn cấu hình có tổng tiết diện nhỏ nhất thỏa dòng yêu cầu (bằng nhau thì ít thanh hơn)
   function busbar(Ireq, o) {
     o = Object.assign({ mat: 'Cu', surf: 'paint', ta: 35, tb: 65, max: 3 }, o);
     const kT = bbTempK(o.tb, o.ta);
     const kM = o.mat === 'Al' ? K_BB_AL : 1;
     const list = [];
-    for (const b of BB) for (let n = 1; n <= Math.min(o.max, 3); n++) {
-      const painted = b[1 + n];
-      const base = o.surf === 'paint' ? painted : painted * b[5] / b[2];
+    for (const b of BB) for (let n = 1; n <= Math.min(o.max, 4); n++) {
+      const base = bbBase(b, n, o.surf);
+      if (!base) continue;
       list.push({ w: b[0], t: b[1], n, I: base * kT * kM, Ibase: base, A: b[0] * b[1] * n });
     }
     list.sort((x, y) => x.A - y.A || x.n - y.n);
-    return { pick: list.find((x) => x.I >= Ireq) || null, kT, kM };
+    const ok = list.filter((x) => x.I >= Ireq);
+    const best = list.reduce((m, x) => (x.I > m.I ? x : m), list[0]);
+    return { pick: ok[0] || null, alt: ok.slice(1, 4), kT, kM, best };
   }
-  const bbTxt = (b) => `${b.n > 1 ? b.n + ' × ' : ''}${b.w}×${b.t}`;
-  Object.assign(U, { busbar, bbTxt, bbK, bbTempK, BB });
+  const bbTxt = (b) => `${b.n > 1 ? b.n + ' × ' : ''}${f(b.w)}×${f(b.t)}`;
+  Object.assign(U, { busbar, bbTxt, bbK, bbTempK, bbBase, BB });
 
   const UHV = [['22', '22 kV'], ['35', '35 kV'], ['10', '10 kV'], ['6', '6 kV']];
   const UM = { 22: 24, 35: 40.5, 10: 12, 6: 7.2 };
@@ -230,8 +241,8 @@
       const Ik = U.ikTrafo(v.s, v.uk, v.u).Ik;
       const icu = U.pick(U.STD.icu, Ik * k);
       const ct = U.pick(U.STD.ct, Itk);
-      const bb = busbar(Itk, { mat: v.mat, ta: v.ta, max: 3 });
-      const bbN = busbar(Itk * 0.5, { mat: v.mat, ta: v.ta, max: 3 });
+      const bb = busbar(Itk, { mat: v.mat, ta: v.ta, max: 4 });
+      const bbN = busbar(Itk * 0.5, { mat: v.mat, ta: v.ta, max: 4 });
       const kth = bbK(v.mat, 65);
       const fMin = Ik * 1000 * 1 / kth;
       const tiles = [
@@ -239,7 +250,7 @@
         { l: 'Dòng định mức MBA', v: f(I, 0), u: 'A', s: `Itk = ${f(Itk, 0)} A` },
         { l: 'Ik tại thanh cái', v: f(Ik, 1), u: 'kA', s: 'IEC 60909, lưới vô cùng lớn' },
         { l: 'Biến dòng đo lường', v: `${ct}/5`, u: 'A', s: 'Cấp 0,5 cho đồng hồ đa năng' },
-        { l: 'Thanh cái pha', v: bb.pick ? bbTxt(bb.pick) : '—', u: 'mm', s: bb.pick ? `${v.mat}, có sơn · ${f(bb.pick.I, 0)} A` : 'Vượt bảng – dùng busway' },
+        { l: 'Thanh cái pha', v: bb.pick ? bbTxt(bb.pick) : '—', u: 'mm', s: bb.pick ? `${v.mat}, có sơn · ${f(bb.pick.I, 0)} A` : `Vượt bảng (lớn nhất ${bbTxt(bb.best)} = ${f(bb.best.I, 0)} A) – tính ở T-04 chế độ tự nhập` },
         { l: 'Thanh N / PE', v: bb.pick ? bbTxt(bb.pick) : '—', u: 'mm', s: `N = 100 %; PE ≥ ${bbN.pick ? bbTxt(bbN.pick) : '50 % pha'}` },
         { l: 'Tụ bù sơ bộ', v: `${U.pick(U.STD.kvar, 0.3 * v.s)}`, u: 'kVAr', s: '≈ 30 % Sđm MBA, tính ở Đ-06' }
       ];
@@ -252,6 +263,7 @@
         tiles,
         checks: [
           [bb.pick && bb.pick.A >= fMin ? 'ok' : 'bad', 'Ổn định nhiệt thanh cái', `${bb.pick ? f(bb.pick.A) : '—'} mm² ≥ Ik·√t / k = ${f(fMin, 0)} mm² (t = 1 s, k = ${f(kth, 0)})`],
+          ...(bb.pick && bb.pick.n === 4 ? [['warn', 'Thanh cái 4 thanh/pha', 'Giá trị bảng 4 thanh đã lấy thận trọng nhưng chưa đối chiếu được nguồn ngoài – kiểm tra theo hồ sơ nhà chế tạo tủ.']] : []),
           [v.ta > 40 ? 'warn' : 'ok', 'Nhiệt độ trong tủ', v.ta > 40 ? `${f(v.ta)} °C: kiểm tra hệ số giảm tải ACB theo catalogue, cân nhắc quạt thông gió tủ.` : 'Trong giới hạn chuẩn.'],
           ['ok', 'Chống sét lan truyền', 'Lắp SPD Type 1+2 (Iimp ≥ 12,5 kA/cực) tại tủ tổng.']
         ],
@@ -273,20 +285,27 @@
   });
 
   // ================= T-04 Thanh cái =================
+  const isCustom = (v) => v.mode === 'custom';
   CD.register({
     id: 'thanh-cai', group: 'tram', code: 'T-04', title: 'Thanh cái hạ thế', short: 'Kích thước thanh cái, ổn định nhiệt.',
-    desc: 'Chọn kích thước thanh cái đồng/nhôm theo DIN 43671, hiệu chỉnh nhiệt độ, kiểm tra ổn định nhiệt và lực điện động khi ngắn mạch.',
+    desc: 'Chọn thanh cái đồng/nhôm theo bảng DIN 43671 (1–4 thanh mỗi pha, rộng đến 200 mm) hoặc tự nhập cấu hình của nhà chế tạo; kiểm tra phát nóng, ổn định nhiệt và lực điện động khi ngắn mạch.',
     sf: 1.25, sfNote: 'Dòng yêu cầu thanh cái = I × k.',
     inputs: [
       { id: 'src', label: 'Dữ liệu', type: 'sel', value: 'I', opts: [['I', 'Biết dòng điện'], ['S', 'Biết công suất kVA']] },
       { id: 'i', label: 'Dòng điện', unit: 'A', value: 2000, show: (v) => v.src === 'I' },
       { id: 's', label: 'Công suất', unit: 'kVA', value: 1250, show: (v) => v.src === 'S' },
       { id: 'u', label: 'Điện áp', unit: 'V', value: 400, show: (v) => v.src === 'S' },
+      { id: 'mode', label: 'Cách chọn thanh cái', type: 'sel', value: 'auto', opts: [['auto', 'Tự chọn theo bảng DIN 43671'], ['custom', 'Tự nhập cấu hình (tùy biến)']] },
       { id: 'mat', label: 'Vật liệu', type: 'sel', value: 'Cu', opts: [['Cu', 'Đồng'], ['Al', 'Nhôm']] },
       { id: 'surf', label: 'Bề mặt', type: 'sel', value: 'paint', opts: [['paint', 'Có sơn / bọc co nhiệt'], ['bare', 'Để trần']] },
       { id: 'ta', label: 'Nhiệt độ quanh thanh cái', unit: '°C', value: 45 },
       { id: 'tb', label: 'Nhiệt độ thanh cái cho phép', unit: '°C', value: 65, hint: 'DIN 43671: 65 °C. Cao hơn phải theo hồ sơ thử nghiệm tủ IEC 61439' },
-      { id: 'max', label: 'Số thanh tối đa mỗi pha', type: 'sel', value: '3', opts: [['1', '1 thanh'], ['2', '2 thanh'], ['3', '3 thanh']] },
+      { id: 'max', label: 'Số thanh mỗi pha tối đa', type: 'sel', value: '4', show: (v) => !isCustom(v), opts: [['1', '1 thanh'], ['2', '2 thanh'], ['3', '3 thanh'], ['4', '4 thanh (2 cặp II II, thanh dày 10 mm)']] },
+      { id: 'cw', label: 'Chiều rộng thanh', unit: 'mm', value: 120, show: isCustom },
+      { id: 'ct', label: 'Chiều dày thanh', unit: 'mm', value: 10, show: isCustom },
+      { id: 'cn', label: 'Số thanh mỗi pha', value: 4, show: isCustom, hint: 'Nhập bất kỳ, ví dụ 6 thanh = 2 bộ 3 thanh' },
+      { id: 'cir', label: 'Dòng định mức của cấu hình', unit: 'A', value: 0, show: isCustom, hint: 'Theo catalogue hoặc hồ sơ thử nghiệm IEC 61439 của nhà chế tạo. 0 = tra bảng DIN nếu cấu hình có trong bảng' },
+      { id: 'cref', label: 'Dòng định mức nhập ở điều kiện', type: 'sel', value: 'std', show: isCustom, opts: [['std', 'Chuẩn 35/65 °C (tool hiệu chỉnh)'], ['site', 'Đúng điều kiện lắp (giữ nguyên)']] },
       { id: 'ik', label: 'Dòng ngắn mạch', unit: 'kA', value: 40 },
       { id: 't', label: 'Thời gian ngắn mạch', unit: 's', value: 1 },
       { id: 'l', label: 'Khoảng cách giữa 2 gối sứ', unit: 'cm', value: 40 },
@@ -294,18 +313,19 @@
     ],
     basis: {
       std: [
-        'Dòng cho phép: DIN 43671 (E-Cu, AC 50 Hz, môi trường 35 °C, thanh 65 °C).',
+        'Dòng cho phép: DIN 43671 (E-Cu, AC 50 Hz, môi trường 35 °C, thanh 65 °C), 1–4 thanh mỗi pha, rộng 20–200 mm.',
         'Ổn định nhiệt: S ≥ Ik·√t / k, k = 226·√ln((200 + 234,5)/(θ + 234,5)) cho đồng, 148·√ln((200 + 228)/(θ + 228)) cho nhôm (IEC 60865-1, θcuối = 200 °C).',
         'Lực điện động pha giữa: F = 0,866·2·10⁻⁷·ip²·l/a (N) = 1,76·10⁻²·(l/a)·ixk² (kG); M = F·l/10; σ = M/W.'
       ],
       assume: [
-        'Nhiều thanh/pha: giá trị thấp đã tính hiệu ứng lân cận; thanh để trần nhiều thanh lấy theo tỉ lệ trần/sơn của 1 thanh.',
-        'Nhôm lấy 0,78 × đồng cùng kích thước (thấp hơn DIN 43670).',
-        'Ứng suất cho phép: đồng 1400 kG/cm², nhôm 700 kG/cm²; W tính theo mặt rộng đối diện nhau (bất lợi nhất), bỏ qua lực giữa các thanh cùng pha.'
+        '4 thanh/pha (2 cặp II II): lấy thận trọng, không vượt 0,9 × 2 × giá trị 2 thanh.',
+        'Thanh để trần nhiều thanh lấy theo tỉ lệ trần/sơn của 1 thanh; nhôm 0,78 × đồng cùng kích thước.',
+        'Chế độ tùy biến: cấu hình ngoài bảng phải nhập dòng định mức của nhà chế tạo; tool vẫn kiểm tra nhiệt, lực điện động theo kích thước nhập.',
+        'Ứng suất cho phép: đồng 1400 kG/cm², nhôm 700 kG/cm²; W theo mặt rộng đối diện nhau (bất lợi nhất), bỏ qua lực giữa các thanh cùng pha.'
       ],
       verify: [
-        'Giá trị 1 thanh/pha đối chiếu được với bảng của Rittal, Siemens (ví dụ 100×10 có sơn 1810 A, 30×10 trần 573 A).',
-        'Thanh ghép 2–3 thanh: đối chiếu catalogue hãng thanh cái hoặc hồ sơ thử nghiệm tủ IEC 61439.'
+        'Giá trị 1 thanh/pha đến 120×10 đối chiếu được với bảng của Rittal, Siemens (ví dụ 100×10 có sơn 1810 A, 30×10 trần 573 A).',
+        'Cỡ 160×10, 200×10 và các phương án nhiều thanh chưa đối chiếu được nguồn ngoài: kiểm tra theo catalogue thanh cái hoặc hồ sơ thử nghiệm tủ IEC 61439.'
       ]
     },
     calc(v, k) {
@@ -314,9 +334,36 @@
       const I = v.src === 'I' ? v.i : v.s * 1000 / (SQ3 * v.u);
       guard(!(I > 0), 'Dòng điện phải lớn hơn 0.');
       const Itk = I * k;
-      const r = busbar(Itk, { mat: v.mat, surf: v.surf, ta: v.ta, tb: v.tb, max: Number(v.max) });
-      guard(!r.pick, 'Không có cấu hình thanh cái đủ tải trong bảng – tăng số thanh mỗi pha hoặc dùng busway (thanh dẫn kín).');
-      const b = r.pick;
+      const kT = bbTempK(v.tb, v.ta), kM = v.mat === 'Al' ? K_BB_AL : 1;
+      const checks = [];
+      let b, how, rated = true, alt = [];
+      if (isCustom(v)) {
+        guard(!(v.cw > 0 && v.ct > 0 && v.cn >= 1), 'Chiều rộng, chiều dày và số thanh phải lớn hơn 0.');
+        const n = Math.round(v.cn);
+        const row = BB.find((r) => r[0] === v.cw && r[1] === v.ct);
+        const tab = row ? bbBase(row, n, v.surf) : null;
+        let Iok = null, Ibase = null;
+        if (v.cir > 0) {
+          Ibase = v.cir; Iok = v.cref === 'std' ? v.cir * kT : v.cir;
+          how = v.cref === 'std' ? `Dòng nhà chế tạo ${f(v.cir, 0)} A × kθ` : `Dòng nhà chế tạo ${f(v.cir, 0)} A (không hiệu chỉnh)`;
+          checks.push(['ok', 'Dòng định mức', `Theo số liệu nhà chế tạo nhập vào: ${f(v.cir, 0)} A${v.cref === 'std' ? ` ở 35/65 °C, hiệu chỉnh về ${f(v.ta)}/${f(v.tb)} °C` : ''}.`]);
+        } else if (tab) {
+          Ibase = tab; Iok = tab * kT * kM; how = `Bảng DIN 43671, ${n} thanh, ${v.surf === 'paint' ? 'có sơn' : 'trần'}`;
+        } else {
+          rated = false; how = 'Ngoài bảng DIN 43671';
+        }
+        b = { w: v.cw, t: v.ct, n, I: Iok, Ibase, A: v.cw * v.ct * n };
+        if (n > 4) checks.push(['warn', 'Trên 4 thanh mỗi pha', 'Hiệu ứng lân cận làm các thanh phía trong mang ít dòng; chỉ dùng theo thiết kế đã thử nghiệm của nhà chế tạo (thường chia thành nhiều bộ thanh song song).']);
+      } else {
+        const r = busbar(Itk, { mat: v.mat, surf: v.surf, ta: v.ta, tb: v.tb, max: Number(v.max) });
+        if (!r.pick) {
+          const r4 = Number(v.max) < 4 ? busbar(Itk, { mat: v.mat, surf: v.surf, ta: v.ta, tb: v.tb, max: 4 }) : null;
+          if (r4 && r4.pick) throw new Error(`Cần ${f(Itk, 0)} A: với tối đa ${v.max} thanh/pha bảng không đủ. Chọn "Số thanh mỗi pha tối đa" = 4 để có phương án ${bbTxt(r4.pick)} mm (${f(r4.pick.I, 0)} A).`);
+          throw new Error(`Cần ${f(Itk, 0)} A nhưng cấu hình lớn nhất trong bảng DIN 43671 (${bbTxt(r.best)} mm) chỉ đạt ${f(r.best.I, 0)} A ở ${f(v.ta)} / ${f(v.tb)} °C. Cách xử lý: chọn "Tự nhập cấu hình" với dòng định mức của nhà chế tạo; dùng hệ thanh cái hoặc busway có thử nghiệm điển hình; chia phân đoạn thanh cái (nhiều MBA); hoặc xem lại hệ số k.`);
+        }
+        b = r.pick; alt = r.alt;
+        how = `Bảng DIN 43671, ${b.n} thanh, ${v.surf === 'paint' ? 'có sơn' : 'trần'}`;
+      }
       const kth = bbK(v.mat, v.tb);
       const fMin = v.ik * 1000 * Math.sqrt(v.t) / kth;
       const ixk = 1.8 * Math.SQRT2 * v.ik;
@@ -324,25 +371,28 @@
       const M = F * v.l / 10;                                       // kG·cm
       const W = b.n * (b.t / 10) * (b.t / 10) * (b.w / 10) / 6;      // cm³, mặt rộng đối diện nhau
       const sig = M / W, sigCp = v.mat === 'Cu' ? 1400 : 700;
+      if (rated) checks.unshift([b.I >= Itk ? 'ok' : 'bad', 'Phát nóng', `${f(b.I, 0)} A ${b.I >= Itk ? '≥' : '<'} ${f(Itk, 0)} A`]);
+      else checks.unshift(['warn', 'Phát nóng', `Cấu hình ${bbTxt(b)} mm ngoài bảng DIN 43671 – nhập "Dòng định mức của cấu hình" theo catalogue / hồ sơ thử nghiệm để kiểm tra.`]);
+      if (b.n === 4 && !(isCustom(v) && v.cir > 0)) checks.push(['warn', 'Cấu hình 4 thanh/pha', 'Giá trị bảng 4 thanh (2 cặp II II) đã lấy thận trọng nhưng chưa đối chiếu được nguồn ngoài – bắt buộc kiểm tra theo catalogue nhà chế tạo tủ.']);
+      if (b.w > 120 && !(isCustom(v) && v.cir > 0)) checks.push(['warn', 'Thanh rộng trên 120 mm', 'Giá trị bảng cho cỡ 160×10, 200×10 chưa đối chiếu được nguồn ngoài – kiểm tra theo catalogue.']);
+      checks.push([b.A >= fMin ? 'ok' : 'bad', 'Ổn định nhiệt', `${f(b.A)} mm² ${b.A >= fMin ? '≥' : '<'} Ik·√t / k = ${f(fMin, 0)} mm²`]);
+      checks.push([sig <= sigCp ? 'ok' : 'bad', 'Ổn định động (ước tính)', `σ = ${f(sig, 0)} ${sig <= sigCp ? '≤' : '>'} ${sigCp} kG/cm²${sig > sigCp ? ' – giảm khoảng cách gối sứ hoặc tăng khoảng cách pha' : ''}`]);
+      if (alt.length) checks.push(['ok', 'Phương án khác cũng đạt', alt.map((x) => `${bbTxt(x)} mm (${f(x.I, 0)} A)`).join(' · ')]);
       return {
         tiles: [
-          { l: 'Thanh cái mỗi pha', v: bbTxt(b), u: 'mm', main: true, s: `${v.mat === 'Cu' ? 'Đồng' : 'Nhôm'} · ${v.surf === 'paint' ? 'có sơn' : 'để trần'} · ${f(b.A)} mm²` },
-          { l: 'Dòng cho phép sau hiệu chỉnh', v: f(b.I, 0), u: 'A', s: `Yêu cầu ${f(Itk, 0)} A` },
+          { l: 'Thanh cái mỗi pha', v: bbTxt(b), u: 'mm', main: true, s: `${v.mat === 'Cu' ? 'Đồng' : 'Nhôm'} · ${v.surf === 'paint' ? 'có sơn' : 'để trần'} · ${f(b.A)} mm²${isCustom(v) ? ' · cấu hình tự nhập' : ''}` },
+          { l: 'Dòng cho phép sau hiệu chỉnh', v: rated ? f(b.I, 0) : '—', u: rated ? 'A' : '', s: rated ? `Yêu cầu ${f(Itk, 0)} A` : 'Cần dòng định mức của nhà chế tạo' },
           { l: 'Mật độ dòng', v: f(I / b.A, 2), u: 'A/mm²' },
           { l: 'Tiết diện tối thiểu (nhiệt)', v: f(fMin, 0), u: 'mm²', s: `k = ${f(kth, 0)}` },
           { l: 'Ứng suất uốn', v: f(sig, 0), u: 'kG/cm²', s: `Cho phép ${sigCp} kG/cm²` }
         ],
-        checks: [
-          [b.I >= Itk ? 'ok' : 'bad', 'Phát nóng', `${f(b.I, 0)} A ≥ ${f(Itk, 0)} A`],
-          [b.A >= fMin ? 'ok' : 'bad', 'Ổn định nhiệt', `${f(b.A)} mm² ≥ Ik·√t / k = ${f(fMin, 0)} mm²`],
-          [sig <= sigCp ? 'ok' : 'bad', 'Ổn định động (ước tính)', `σ = ${f(sig, 0)} ${sig <= sigCp ? '≤' : '>'} ${sigCp} kG/cm²${sig > sigCp ? ' – giảm khoảng cách gối sứ hoặc tăng khoảng cách pha' : ''}`]
-        ],
+        checks,
         steps: [
           ['Dòng làm việc', v.src === 'I' ? 'I (nhập)' : 'I = S / (√3·U)', `${f(I, 1)} A`],
           ['Dòng yêu cầu', 'Itk = I × k', `${f(Itk, 1)} A`],
-          ['Dòng bảng (35 °C / 65 °C)', `DIN 43671, ${b.n} thanh, ${v.surf === 'paint' ? 'có sơn' : 'trần'}`, `${f(b.Ibase, 0)} A`],
-          ['Hiệu chỉnh nhiệt độ', `((θcp − θ)/30)^${(v.tb - v.ta) < 30 ? '0,6' : '0,54'}`, f(r.kT, 3)],
-          ['Hệ số vật liệu', v.mat === 'Al' ? 'Nhôm 0,78 × đồng' : 'Đồng', f(r.kM, 2)],
+          rated ? ['Dòng cơ sở', how, `${f(b.Ibase, 0)} A`] : ['Dòng cơ sở', how, '—'],
+          ['Hiệu chỉnh nhiệt độ', `((θcp − θ)/30)^${(v.tb - v.ta) < 30 ? '0,6' : '0,54'}`, f(kT, 3)],
+          ['Hệ số vật liệu', v.mat === 'Al' ? 'Nhôm 0,78 × đồng (khi tra bảng)' : 'Đồng', f(kM, 2)],
           ['Hệ số ổn định nhiệt', 'k = K·√ln((θf + β)/(θi + β))', f(kth, 1)],
           ['Dòng xung kích', 'ixk = 1,8·√2·Ik', `${f(ixk, 1)} kA`],
           ['Lực điện động', 'F = 1,76·10⁻²·(l/a)·ixk²', `${f(F, 0)} kG`],
@@ -350,10 +400,10 @@
           ['Mô-men chống uốn', 'W = n·b²·h / 6', `${f(W, 2)} cm³`]
         ],
         notes: [
-          'Dòng trên 4000 A hoặc cần nhiều hơn 3 thanh/pha nên dùng busway (thanh dẫn kín) có thử nghiệm điển hình.',
+          'Dòng trên khoảng 4000 A nên dùng hệ thanh cái hoặc busway có thử nghiệm điển hình (IEC 61439) của nhà chế tạo; nhiều bộ thanh song song phải đối xứng để chia dòng đều.',
           'Mối nối bulông: bề mặt mạ thiếc, siết đúng lực, kiểm tra camera nhiệt định kỳ 6 tháng.'
         ],
-        raw: { I, Itk, A: b.A, n: b.n, w: b.w, t: b.t, Ibar: b.I, Ibase: b.Ibase, kT: r.kT, kth, fMin, F, sig }
+        raw: { I, Itk, A: b.A, n: b.n, w: b.w, t: b.t, Ibar: b.I, Ibase: b.Ibase, kT, kth, fMin, F, sig, rated }
       };
     }
   });

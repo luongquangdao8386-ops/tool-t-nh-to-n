@@ -32,7 +32,7 @@ Bộ công cụ hỗ trợ tính toán cơ điện cho nhà máy giấy bao bì.
 | T-01 | Chọn máy biến áp | Hệ số nhu cầu; Uk theo IEC 60076-5; Ik theo IEC 60909 |
 | T-02 | Tủ trung thế | IEC 62271; ổn định nhiệt cáp IEC 60949 |
 | T-03 | Tủ hạ thế tổng (MSB) | IEC 60909; thanh cái DIN 43671; IEC 61439 |
-| T-04 | Thanh cái hạ thế | DIN 43671; ổn định nhiệt IEC 60865-1/IEC 60949; lực điện động |
+| T-04 | Thanh cái hạ thế | DIN 43671 (1–4 thanh/pha, rộng đến 200 mm) hoặc tự nhập cấu hình và dòng định mức của nhà chế tạo; ổn định nhiệt IEC 60865-1/IEC 60949; lực điện động |
 | T-05 | Máy phát điện dự phòng | ISO 8528-1; sụt áp khởi động động cơ |
 | T-06 | Hệ thống tiếp địa | Điện trở cọc chôn sâu; hệ số sử dụng (cận dưới) |
 | C-01 | Hệ thống chiller | Cân bằng nhiệt, công suất bơm, nước bổ sung tháp |

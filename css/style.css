@@ -46,7 +46,7 @@ button .icon, a .icon { pointer-events: none; }
 [hidden] { display: none !important; }
 .num { font-variant-numeric: tabular-nums; }
 .skip { position: fixed; top: -80px; left: 20px; z-index: 1000; background: var(--ink); color: #fff; padding: 12px 20px; border-radius: 8px; }
-.skip:focus { top: 10px; }
+.skip:focus-visible { top: 10px; }
 .icon-button { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 10px; color: var(--text); }
 .icon-button:hover { background: var(--canvas); }
 
