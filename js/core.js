@@ -289,6 +289,9 @@
     });
   }
 
+  // Giữ số dính với đơn vị khi xuống dòng (259 A, 2,36 %, 120 mm²…)
+  const nb = (s) => String(s).replace(/(\d) (?=(A|V|kA|kV|%|mm²|mm|kVA|kVAr|kW|m|°C|s|Ω|lux|bar|RT)\b|%|mm²|°C|Ω)/g, '$1 ');
+
   // Tách "Tiêu đề: chi tiết" để hiện hai dòng như thiết kế
   function splitCheck(c) {
     if (c.length >= 3) return [c[1], c[2]];
@@ -333,12 +336,12 @@
       h += `<h3 class="checks-title">Kiểm tra phương án${main ? `<small>Đang chọn: ${esc(main.v)}${main.u ? ' ' + esc(main.u) : ''}</small>` : ''}</h3><ul class="checks">` + r.checks.map((c) => {
         const [cls, ic, lab] = map[c[0]];
         const [title, detail] = splitCheck(c);
-        return `<li class="check-row ${cls}"><span class="check-status-icon">${icon(ic)}</span><div class="check-copy"><strong>${esc(title)}</strong>${detail ? `<p>${esc(detail)}</p>` : ''}</div><span class="badge ${cls}">${lab}</span></li>`;
+        return `<li class="check-row ${cls}"><span class="check-status-icon">${icon(ic)}</span><div class="check-copy"><strong>${esc(nb(title))}</strong>${detail ? `<p>${esc(nb(detail))}</p>` : ''}</div><span class="badge ${cls}">${lab}</span></li>`;
       }).join('') + '</ul>';
     }
     if (r.steps && r.steps.length) {
       h += `<section class="formula-panel" aria-labelledby="formula-title"><h3 class="formula-title" id="formula-title">${icon('formula')}Diễn giải công thức</h3><div class="formula-wrap"><table><thead><tr><th scope="col">Đại lượng</th><th scope="col">Công thức</th><th scope="col">Giá trị</th></tr></thead><tbody>` +
-        r.steps.map((s) => `<tr><td>${esc(s[0])}</td><td class="math">${esc(s[1] || '')}</td><td>${esc(s[2])}</td></tr>`).join('') + '</tbody></table></div></section>';
+        r.steps.map((s) => `<tr><td>${esc(s[0])}</td><td class="math">${esc(s[1] || '')}</td><td>${esc(nb(s[2]))}</td></tr>`).join('') + '</tbody></table></div></section>';
     }
     if (r.notes && r.notes.length) {
       h += `<div class="notes-box"><h3>${icon('info')}Ghi chú kỹ thuật</h3><ul>${r.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
