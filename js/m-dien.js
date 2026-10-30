@@ -36,10 +36,12 @@
     if (ta >= tmax) return NaN;
     return Math.sqrt((tmax - ta) / (tmax - ref));
   }
-  // Chọn cáp sơ bộ (dùng cho các module khác): Ireq đã chia hệ số hiệu chỉnh
+  // Chọn cáp theo dòng yêu cầu đã chia hệ số hiệu chỉnh; o.min = tiết diện tối thiểu (mm²)
   function cableFor(Ireq, o) {
-    o = Object.assign({ mat: 'Cu', ins: 'XLPE', met: 'C', pha: '3' }, o);
-    for (let i = o.mat === 'Al' ? 5 : 0; i < SIZES.length; i++) {
+    o = Object.assign({ mat: 'Cu', ins: 'XLPE', met: 'C', pha: '3', min: 0 }, o);
+    let i0 = o.mat === 'Al' ? 5 : 0;
+    if (o.min) i0 = Math.max(i0, SIZES.findIndex((x) => x >= o.min));
+    for (let i = i0; i < SIZES.length; i++) {
       const iz = izBase(i, o.mat, o.ins, o.met, o.pha);
       if (iz >= Ireq) return { S: SIZES[i], Iz: iz, np: 1 };
     }
@@ -50,8 +52,23 @@
     const s = Sph <= 16 ? Sph : Sph <= 35 ? 16 : Sph / 2;
     return U.pick(SIZES, s) || s;
   }
+  const SUP = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+  function sci(x) {
+    const e = Math.floor(Math.log10(x));
+    return `${f(x / Math.pow(10, e), 1)}·10${String(e).split('').map((c) => SUP[c]).join('')}`;
+  }
   const cableTxt = (c) => (c.np > 1 ? `${c.np} × ${f(c.S)} mm²/pha` : `${f(c.S)} mm²`);
-  Object.assign(U, { izBase, kTemp, cableFor, peSize, cableTxt, AMP });
+  // Chọn cáp nhanh cho mạch động lực trong xưởng: Iz·k1·k2 ≥ I (I thường là In aptomat),
+  // 40 °C, đi chung máng k2 = 0,8 (2 mạch), tối thiểu 2,5 mm²
+  function cableQuick(I, o) {
+    o = Object.assign({ ins: 'XLPE', min: 2.5 }, o);
+    const k1 = kTemp(o.ins, 40, 30), k2 = 0.8;
+    const c = cableFor(I / (k1 * k2), o);
+    c.IzCorr = c.Iz * k1 * k2 * c.np;
+    return c;
+  }
+  const QUICK_NOTE = '40 °C, đi chung máng, tối thiểu 2,5 mm²';
+  Object.assign(U, { izBase, kTemp, cableFor, cableQuick, peSize, cableTxt, AMP, QUICK_NOTE });
 
   // Dòng điện từ công suất
   function current(Pkw, Uv, cos, pha, eta = 1) {
@@ -66,54 +83,66 @@
   const guard = (cond, msg) => { if (cond) throw new Error(msg); };
 
   // ================= Đ-01 Tính dòng điện =================
+  const isMotor = (v) => v.mode === 'motor' || v.mode === 'hp';
   CD.register({
     id: 'dong-dien', group: 'dien', code: 'Đ-01', title: 'Tính dòng điện', short: 'Dòng tải từ kW, kVA hoặc HP.',
-    desc: 'Dòng làm việc từ kW, kVA hoặc HP; công suất S, P, Q và dòng thiết kế có hệ số an toàn.',
-    sf: 1.25, sfNote: 'Dòng thiết kế Itk = Ib × k – dùng để chọn aptomat, cáp, thanh cái.',
+    desc: 'Dòng làm việc của động cơ hoặc tải thường từ kW, HP, kVA; công suất S, P, Q, dòng thiết kế có hệ số an toàn, aptomat và cáp sơ bộ.',
+    sf: 1.25, sfNote: 'Itk = Ib × k → aptomat In ≥ Itk → cáp phải chịu được In (Ib ≤ In ≤ Iz).',
     inputs: [
-      { id: 'mode', label: 'Dữ liệu đã biết', type: 'sel', value: 'kw', opts: [['kw', 'Công suất P (kW)'], ['kva', 'Công suất S (kVA)'], ['hp', 'Động cơ (HP)']] },
+      { id: 'mode', label: 'Dữ liệu đã biết', type: 'sel', value: 'motor', opts: [['motor', 'Động cơ – công suất trục (kW)'], ['hp', 'Động cơ – công suất (HP)'], ['kw', 'Tải thường – công suất P (kW)'], ['kva', 'Công suất biểu kiến S (kVA)']] },
       PHA, U3, U1,
-      { id: 'p', label: 'Công suất P', unit: 'kW', value: 75, show: (v) => v.mode === 'kw' },
+      { id: 'p', label: 'Công suất P', unit: 'kW', value: 7.5, show: (v) => v.mode === 'motor' || v.mode === 'kw' },
       { id: 's', label: 'Công suất S', unit: 'kVA', value: 100, show: (v) => v.mode === 'kva' },
-      { id: 'hp', label: 'Công suất động cơ', unit: 'HP', value: 50, show: (v) => v.mode === 'hp' },
-      { id: 'cos', label: 'Hệ số công suất cosφ', value: 0.85 },
-      { id: 'eta', label: 'Hiệu suất η', value: 1, show: (v) => v.mode !== 'kva', hint: 'Tải điện trở = 1; động cơ 0,9–0,96 (P là công suất trục)' }
+      { id: 'hp', label: 'Công suất động cơ', unit: 'HP', value: 10, show: (v) => v.mode === 'hp' },
+      { id: 'cos', label: 'Hệ số công suất cosφ', value: 0.85, hint: 'Động cơ 4 cực 0,80–0,87; tải điện trở = 1' },
+      { id: 'etam', label: 'Hiệu suất động cơ η', value: 0.9, show: isMotor, hint: 'IE3: 4 kW ≈ 0,88; 7,5 kW ≈ 0,90; 15 kW ≈ 0,92; 55 kW ≈ 0,945' },
+      { id: 'eta', label: 'Hiệu suất η', value: 1, show: (v) => v.mode === 'kw', hint: 'Sấy điện trở, chiếu sáng, tải thuần = 1' }
     ],
     calc(v, k) {
       const Uv = uOf(v);
       guard(!(v.cos > 0 && v.cos <= 1), 'cosφ phải trong khoảng 0–1.');
       guard(Uv <= 0, 'Điện áp phải lớn hơn 0.');
-      let P, S;
+      const motor = isMotor(v);
+      const eta = motor ? v.etam : v.eta;
+      let P, S, Pm = 0;
       if (v.mode === 'kva') { S = v.s; P = S * v.cos; }
       else {
-        guard(!(v.eta > 0 && v.eta <= 1), 'Hiệu suất η phải trong khoảng 0–1.');
-        P = (v.mode === 'hp' ? v.hp * 0.746 : v.p) / v.eta; S = P / v.cos;
+        guard(!(eta > 0 && eta <= 1), 'Hiệu suất η phải trong khoảng 0–1.');
+        Pm = v.mode === 'hp' ? v.hp * 0.746 : v.p;
+        P = Pm / eta; S = P / v.cos;
       }
       const Q = Math.sqrt(Math.max(S * S - P * P, 0));
       const I = v.pha === '1' ? S * 1000 / Uv : S * 1000 / (SQ3 * Uv);
       const Itk = I * k;
       const In = U.pick(U.STD.breaker, Itk);
-      const cab = cableFor(Itk / 0.91);
+      const cab = cableQuick(In || Itk, { pha: v.pha });
+      const checks = [];
+      if (In) checks.push([cab.IzCorr >= In ? 'ok' : 'bad', 'Bảo vệ cáp', `Itk = ${f(Itk, 1)} A ≤ In = ${In} A ≤ Iz ≈ ${f(cab.IzCorr, 0)} A`]);
+      if (motor) checks.push(['warn', 'Động cơ khởi động trực tiếp', 'Dòng khởi động 6–7 × Ib: dùng aptomat bảo vệ động cơ hoặc đường cong D. Tính đầy đủ contactor, rơ le nhiệt ở Đ-05.']);
       return {
         tiles: [
           { l: 'Dòng thiết kế Itk = Ib × k', v: f(Itk, 1), u: 'A', main: true, s: `Dòng làm việc Ib = ${f(I, 1)} A` },
           { l: 'Công suất biểu kiến S', v: f(S, 1), u: 'kVA' },
-          { l: 'Công suất tác dụng P (điện)', v: f(P, 1), u: 'kW' },
+          { l: 'Công suất điện vào P', v: f(P, 1), u: 'kW', s: motor ? `Trục ${f(Pm, 2)} kW, η = ${f(eta, 2)}` : '' },
           { l: 'Công suất phản kháng Q', v: f(Q, 1), u: 'kVAr' },
-          { l: 'Aptomat sơ bộ', v: In ? `${In}` : '> 6300', u: 'A', s: In ? U.breakerType(In) : 'Chia lộ' },
-          { l: 'Cáp Cu/XLPE sơ bộ', v: cableTxt(cab), s: 'Lắp kiểu C, 40 °C' }
+          { l: 'Aptomat sơ bộ', v: In ? `${In}` : '> 6300', u: 'A', s: In ? (motor ? `${U.breakerType(In)} bảo vệ động cơ` : U.breakerType(In)) : 'Chia lộ' },
+          { l: 'Cáp Cu/XLPE sơ bộ', v: cableTxt(cab), s: `Chịu được In · ${QUICK_NOTE}` }
         ],
+        checks,
         steps: [
-          v.mode === 'hp' ? ['Đổi HP → kW', 'P = HP × 0,746 / η', `${f(P, 2)} kW`] : null,
-          v.mode === 'kw' ? ['Công suất điện vào', 'P = Pđm / η', `${f(P, 2)} kW`] : null,
+          v.mode === 'hp' ? ['Đổi HP → kW', 'Ptrục = HP × 0,746', `${f(Pm, 2)} kW`] : null,
+          v.mode !== 'kva' ? ['Công suất điện vào', 'P = Ptrục / η', `${f(P, 2)} kW`] : null,
           ['Công suất biểu kiến', v.mode === 'kva' ? 'S (đã biết)' : 'S = P / cosφ', `${f(S, 2)} kVA`],
           ['Công suất phản kháng', 'Q = √(S² − P²)', `${f(Q, 2)} kVAr`],
           ['Dòng làm việc', v.pha === '1' ? 'Ib = S / U' : 'Ib = S / (√3 × U)', `${f(I, 2)} A`],
-          ['Dòng thiết kế', 'Itk = Ib × k', `${f(Itk, 2)} A`]
+          ['Dòng thiết kế', 'Itk = Ib × k', `${f(Itk, 2)} A`],
+          In ? ['Aptomat', 'In ≥ Itk (dãy chuẩn)', `${In} A`] : null,
+          ['Cáp sơ bộ', 'Iz × 0,91 (40 °C) × 0,8 (đi chung) ≥ In; ≥ 2,5 mm²', cableTxt(cab)]
         ].filter(Boolean),
         notes: [
-          'Động cơ: nhập công suất trục (ghi trên nhãn) và hiệu suất η để ra dòng điện vào.',
-          'Aptomat và cáp ở đây là chọn nhanh; dùng Đ-02 và Đ-03 để kiểm tra đủ điều kiện lắp đặt, sụt áp, ngắn mạch.'
+          'Động cơ: nhập công suất trục ghi trên nhãn và hiệu suất η, dòng tính ra sát dòng định mức trên nhãn.',
+          'Cáp phải chịu được dòng định mức aptomat (Ib ≤ In ≤ Iz), không chỉ dòng tải.',
+          'Aptomat và cáp ở đây là chọn nhanh; dùng Đ-02 để tính theo cách lắp, số mạch đi chung, chiều dài (sụt áp) và ngắn mạch.'
         ]
       };
     }
@@ -123,9 +152,10 @@
   CD.register({
     id: 'tiet-dien-day', group: 'dien', code: 'Đ-02', title: 'Tiết diện dây & sụt áp', short: 'Chọn cáp, kiểm tra tải và sụt áp.',
     desc: 'Chọn tiết diện cáp theo dòng cho phép (có hiệu chỉnh nhiệt độ, số mạch đi chung), sụt áp và ổn định nhiệt ngắn mạch.',
-    sf: 1.25, sfNote: 'Dòng thiết kế Itk = Ib × k được dùng cho cả điều kiện phát nóng và sụt áp.',
+    sf: 1.25, sfNote: 'Itk = Ib × k → aptomat In ≥ Itk → cáp phải chịu được In (Ib ≤ In ≤ Iz); sụt áp tính theo Itk.',
     inputs: [
       PHA,
+      { id: 'circ', label: 'Loại mạch', type: 'sel', value: 'pow', opts: [['pow', 'Động lực (tối thiểu 2,5 mm²)'], ['light', 'Chiếu sáng, điều khiển (tối thiểu 1,5 mm²)']] },
       { id: 'src', label: 'Dữ liệu tải', type: 'sel', value: 'I', opts: [['I', 'Biết dòng tải Ib'], ['P', 'Biết công suất P']] },
       { id: 'ib', label: 'Dòng tải Ib', unit: 'A', value: 180, show: (v) => v.src === 'I' },
       { id: 'p', label: 'Công suất P', unit: 'kW', value: 90, show: (v) => v.src === 'P' },
@@ -140,8 +170,9 @@
       { id: 'np', label: 'Số sợi song song mỗi pha', value: 1 },
       { id: 'L', label: 'Chiều dài tuyến cáp', unit: 'm', value: 120 },
       { id: 'du', label: 'Sụt áp cho phép', unit: '%', value: 5, hint: 'Chiếu sáng 3 %, động lực 5 %' },
+      { id: 'prot', label: 'Thiết bị cắt ngắn mạch', type: 'sel', value: 'auto', opts: [['auto', 'Tự chọn theo aptomat (≤ 630 A cắt tức thời)'], ['limit', 'MCB / MCCB cắt tức thời, hạn dòng'], ['delay', 'ACB có trễ thời gian']] },
       { id: 'ik', label: 'Dòng ngắn mạch đầu cáp', unit: 'kA', value: 25, hint: 'Nhập 0 nếu bỏ qua kiểm tra' },
-      { id: 'tk', label: 'Thời gian cắt ngắn mạch', unit: 's', value: 0.2 }
+      { id: 'tk', label: 'Thời gian trễ cắt', unit: 's', value: 0.2, show: (v) => v.prot !== 'limit', hint: 'Chỉ dùng cho ACB có trễ thời gian' }
     ],
     calc(v, k) {
       const Uv = uOf(v);
@@ -154,17 +185,22 @@
       const kt = kTemp(v.ins, ta, ref);
       guard(!isFinite(kt), 'Nhiệt độ môi trường vượt nhiệt độ làm việc cho phép của cách điện.');
       const kg = U.interp(GROUP[v.met], Math.round(v.n));
-      const i0 = v.mat === 'Al' ? 5 : 0, last = SIZES.length - 1;
+      const In = U.pick(U.STD.breaker, Itk);
+      const Ireq = In || Itk;                       // Ib ≤ In ≤ Iz: cáp phải chịu được dòng định mức aptomat
+      const sMin0 = v.circ === 'light' ? 1.5 : 2.5;
+      const iBase = v.mat === 'Al' ? 5 : 0;
+      const i0 = Math.max(iBase, SIZES.indexOf(sMin0)), last = SIZES.length - 1;
       const checks = [];
       let np = Math.round(v.np);
-      let need = Itk / (np * kt * kg);
+      let need = Ireq / (np * kt * kg);
       if (izBase(last, v.mat, v.ins, v.met, v.pha) < need) {
-        const np2 = Math.ceil(Itk / (izBase(14, v.mat, v.ins, v.met, v.pha) * kt * kg));
+        const np2 = Math.ceil(Ireq / (izBase(14, v.mat, v.ins, v.met, v.pha) * kt * kg));
         checks.push(['warn', `Một sợi 300 mm² không đủ tải – đã tăng lên ${np2} sợi song song mỗi pha (cỡ 240 mm²).`]);
-        np = Math.max(np, np2); need = Itk / (np * kt * kg);
+        np = Math.max(np, np2); need = Ireq / (np * kt * kg);
       }
-      let i = i0;
-      while (i < last && izBase(i, v.mat, v.ins, v.met, v.pha) < need) i++;
+      let iNat = iBase;
+      while (iNat < last && izBase(iNat, v.mat, v.ins, v.met, v.pha) < need) iNat++;
+      let i = Math.max(iNat, i0);
       const iHeat = i;
       const sinp = Math.sqrt(1 - v.cos * v.cos);
       const du = (idx) => {
@@ -174,8 +210,10 @@
       };
       while (i < last && du(i).pct > v.du) i++;
       const iVd = i;
+      // Aptomat cắt tức thời, hạn dòng: không áp Ik·√t mà so I²t cho qua với (K·S)² (IEC 60364-4-43)
+      const delay = v.prot === 'delay' || (v.prot === 'auto' && In > 630);
       let sMin = 0;
-      if (v.ik > 0) {
+      if (v.ik > 0 && delay) {
         sMin = v.ik * 1000 * Math.sqrt(v.tk) / KSC[v.mat][v.ins];
         while (i < last && SIZES[i] * np < sMin) i++;
       }
@@ -184,17 +222,17 @@
       const IzTot = IzOne * kt * kg * np;
       const d = du(i);
       const pe = peSize(S * np);
-      const In = U.pick(U.STD.breaker, Itk);
-      const gov = i > iVd ? 'ổn định nhiệt ngắn mạch' : i > iHeat ? 'sụt áp' : 'phát nóng (dòng cho phép)';
+      const gov = i > iVd ? 'ổn định nhiệt ngắn mạch' : i > iHeat ? 'sụt áp' : iNat < i0 ? `tiết diện tối thiểu ${f(sMin0)} mm²` : 'phát nóng (dòng cho phép)';
       const izAt = (idx) => izBase(idx, v.mat, v.ins, v.met, v.pha) * kt * kg * np;
-      checks.push([IzTot < Itk ? 'bad' : In && In > IzTot ? 'warn' : 'ok', 'Khả năng tải & bảo vệ',
+      checks.push([IzTot < Ireq ? 'bad' : 'ok', 'Khả năng tải & bảo vệ',
         In ? `Itk = ${f(Itk, 0)} A ≤ In = ${In} A ${In <= IzTot ? '≤' : '>'} Iz = ${f(IzTot, 0)} A` : `Iz = ${f(IzTot, 0)} A ≥ Itk = ${f(Itk, 0)} A`]);
       checks.push([d.pct <= v.du ? 'ok' : 'bad', 'Sụt áp trên tuyến', `${f(d.pct, 2)} % ${d.pct <= v.du ? '≤' : '>'} giới hạn ${f(v.du)} %`]);
-      if (v.ik > 0) checks.push([S * np >= sMin ? 'ok' : 'bad', 'Ổn định nhiệt ngắn mạch', `S = ${f(S * np)} mm² ≥ Smin = ${f(sMin, 1)} mm² (${f(v.ik)} kA, ${f(v.tk)} s)`]);
+      if (v.ik > 0 && delay) checks.push([S * np >= sMin ? 'ok' : 'bad', 'Ổn định nhiệt ngắn mạch', `S = ${f(S * np)} mm² ≥ Smin = ${f(sMin, 1)} mm² (${f(v.ik)} kA, ${f(v.tk)} s)`]);
+      else if (v.ik > 0) checks.push(['warn', 'Ổn định nhiệt ngắn mạch', `Aptomat cắt tức thời: I²t cho qua của aptomat ở ${f(v.ik)} kA phải ≤ (K·S)² = ${sci(Math.pow(KSC[v.mat][v.ins] * S * np, 2))} A²s, tra catalogue.`]);
       checks.push(['warn', 'Điều kiện lắp thực tế', `Đã tính ở ${f(ta)} °C, ${Math.round(v.n)} mạch đi chung, kiểu ${v.met}. Kiểm tra lại tại hiện trường.`]);
       if (i > i0) {
         const j = i - 1, dj = du(j), izj = izAt(j);
-        const why = izj < Itk ? `Iz = ${f(izj, 0)} A < Itk = ${f(Itk, 0)} A`
+        const why = izj < Ireq ? (In ? `Iz = ${f(izj, 0)} A < In aptomat = ${In} A` : `Iz = ${f(izj, 0)} A < Itk = ${f(Itk, 0)} A`)
           : dj.pct > v.du ? `sụt áp ${f(dj.pct, 2)} % > ${f(v.du)} %`
             : `S = ${f(SIZES[j] * np)} mm² < Smin = ${f(sMin, 1)} mm²`;
         checks.push(['bad', `Phương án nhỏ hơn: ${np > 1 ? np + ' × ' : ''}${f(SIZES[j])} mm²`, `Không dùng được vì ${why}.`]);
@@ -214,11 +252,14 @@
           ['Dòng làm việc', v.src === 'I' ? 'Ib (nhập)' : (v.pha === '1' ? 'P / (U·cosφ)' : 'P / (√3·U·cosφ)'), `${f(Ib, 2)} A`],
           ['Dòng thiết kế', 'Itk = Ib × k', `${f(Itk, 2)} A`],
           ['Hệ số nhiệt độ', `k1 = √((θmax − θa)/(θmax − ${ref}))`, f(kt, 3)],
+          In ? ['Aptomat', 'In ≥ Itk (dãy chuẩn)', `${In} A`] : null,
           ['Hệ số nhóm mạch', `k2 (bảng IEC, ${Math.round(v.n)} mạch, kiểu ${v.met})`, f(kg, 3)],
-          ['Dòng yêu cầu mỗi sợi', 'Itk / (n·k1·k2)', `${f(need, 1)} A`],
+          ['Dòng yêu cầu mỗi sợi', In ? 'In / (n·k1·k2)' : 'Itk / (n·k1·k2)', `${f(need, 1)} A`],
+          ['Tiết diện tối thiểu', v.circ === 'light' ? 'Mạch chiếu sáng, điều khiển' : 'Mạch động lực', `${f(sMin0)} mm²`],
           ['Tiết diện theo phát nóng', `Bảng IEC 60364-5-52 · ${MET_LABEL[v.met]}`, `${f(SIZES[iHeat])} mm²`],
           ['Tiết diện theo sụt áp', `ΔU = ${v.pha === '1' ? '2' : '√3'}·I·L·(R·cosφ + X·sinφ)`, `${f(SIZES[iVd])} mm²`],
-          v.ik > 0 ? ['Tiết diện theo ngắn mạch', `Smin = Ik·√t / K (K = ${KSC[v.mat][v.ins]})`, `${f(sMin, 1)} mm²`] : null,
+          v.ik > 0 && delay ? ['Tiết diện theo ngắn mạch', `Smin = Ik·√t / K (K = ${KSC[v.mat][v.ins]})`, `${f(sMin, 1)} mm²`] : null,
+          v.ik > 0 && !delay ? ['Năng lượng cáp chịu được', `(K·S)², K = ${KSC[v.mat][v.ins]}`, `${sci(Math.pow(KSC[v.mat][v.ins] * S * np, 2))} A²s`] : null,
           ['Iz một sợi (bảng)', v.pha === '1' ? 'Mạch 1 pha: × 1,12' : 'Mạch 3 pha', `${f(IzOne, 1)} A`],
           ['Điện trở ruột', `ρ = ${RHO[v.mat]} Ω·mm²/m; X = 0,08 mΩ/m`, `${f(RHO[v.mat] / S * 1000, 3)} mΩ/m`]
         ].filter(Boolean),
@@ -226,7 +267,8 @@
           'Bảng dòng cho phép là cáp nhiều lõi, 3 ruột mang tải. Cáp nhôm lấy ≈ 0,78 lần cáp đồng.',
           'Cáp chôn trực tiếp hoặc đất có nhiệt trở cao (> 2,5 K·m/W) cần nhân thêm hệ số hiệu chỉnh của nhà sản xuất.',
           'Cáp ra biến tần nên dùng loại có màn chắn, đấu đất màn chắn 360° hai đầu.',
-          'Tuyến cáp trên 300 mm² nên chia nhiều sợi 240 mm² song song, cùng chiều dài và cùng loại.'
+          'Tuyến cáp trên 300 mm² nên chia nhiều sợi 240 mm² song song, cùng chiều dài và cùng loại.',
+          'MCB, MCCB cắt ngắn mạch trong vài mili giây và hạn dòng, nên chỉ cần I²t cho qua ≤ (K·S)²; với ACB có trễ thời gian mới dùng Smin = Ik·√t / K.'
         ]
       };
     }
@@ -399,7 +441,7 @@
       const cMain = U.pick(CONTACTOR, Itk * kMain);
       const cStar = yd ? U.pick(CONTACTOR, Itk * 0.33) : null;
       const ol = In * kMain;
-      const cab = cableFor(Itk * kMain / 0.91);
+      const cab = cableQuick(Itk * kMain);
       const Sst = SQ3 * v.u * Ist / 1000;
       const tiles = [
         { l: 'Dòng định mức In', v: f(In, 1), u: 'A', main: true, s: `Dòng khởi động ≈ ${f(Ist, 0)} A (${f(s.m, 1)} × In)` },
@@ -409,7 +451,7 @@
       if (yd) tiles.push({ l: 'Contactor KY (AC-3)', v: `${cStar}`, u: 'A' });
       if (v.st === 'soft' || v.st === 'vfd') tiles.push({ l: v.st === 'vfd' ? 'Biến tần (dòng ra)' : 'Khởi động mềm', v: `≥ ${f(Itk, 0)}`, u: 'A', s: 'Chọn tải nặng cho bơm bột, băng tải' });
       tiles.push({ l: 'Chỉnh rơ le nhiệt', v: f(ol, 1), u: 'A', s: yd ? 'Đặt trên nhánh pha (0,58 In)' : '1,0 × In' });
-      tiles.push({ l: yd ? 'Cáp mỗi bộ (2 bộ 3 ruột)' : 'Cáp Cu/XLPE', v: cableTxt(cab), s: 'Kiểu C, 40 °C' });
+      tiles.push({ l: yd ? 'Cáp mỗi bộ (2 bộ 3 ruột)' : 'Cáp Cu/XLPE', v: cableTxt(cab), s: QUICK_NOTE });
       tiles.push({ l: 'Công suất khởi động', v: f(Sst, 0), u: 'kVA', s: 'Dùng cho tính máy phát' });
       const du = SQ3 * In * kMain * v.L * (0.0225 / cab.S / cab.np * v.cos) / v.u * 100;
       return {
@@ -458,7 +500,7 @@
       const step = U.pick(STEP, Q / n) || Math.ceil(Q / n / 25) * 25;
       const Ic = Q * 1000 / (SQ3 * v.u);
       const brk = U.pick(U.STD.breaker, 1.43 * Ic);
-      const cab = cableFor(1.43 * Ic / 0.91);
+      const cab = cableQuick(1.43 * Ic);
       const S1 = v.p / v.c1, S2 = v.p / v.c2;
       const detune = v.h > 15;
       return {

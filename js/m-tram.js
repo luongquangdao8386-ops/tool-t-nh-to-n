@@ -323,7 +323,7 @@
       const tank = lph * v.h * 1.1;
       const Ig = Sg * 1000 / (SQ3 * 400);
       const brk = U.pick(U.STD.breaker, Ig);
-      const cab = U.cableFor(Ig / 0.91);
+      const cab = U.cableQuick(brk || Ig);
       const load = Srun / prime;
       return {
         tiles: [
@@ -333,7 +333,7 @@
           { l: 'Tiêu hao nhiên liệu', v: f(lph, 0), u: 'L/h', s: `tại ${f(v.lf)} % tải` },
           { l: 'Bồn dầu ngày', v: f(tank, 0), u: 'L', s: `${f(v.h)} giờ + 10 % đáy bồn` },
           { l: 'Aptomat đầu cực / ATS', v: `${brk}`, u: 'A', s: `Iđm máy phát = ${f(Ig, 0)} A` },
-          { l: 'Cáp ra máy phát', v: U.cableTxt(cab), s: 'Cu/XLPE, kiểu C, 40 °C' }
+          { l: 'Cáp ra máy phát', v: U.cableTxt(cab), s: `Cu/XLPE chịu được aptomat · ${U.QUICK_NOTE}` }
         ],
         checks: [
           [load >= 0.3 ? 'ok' : 'warn', `Mức tải vận hành ≈ ${f(load * 100, 0)} % ${load < 0.3 ? '– dưới 30 % dễ đóng muội (wet stacking), cần tải giả khi chạy thử' : ''}`],

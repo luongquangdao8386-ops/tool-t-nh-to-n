@@ -133,7 +133,7 @@
       const Pin = unit * 0.000293 / 3.2;
       const I = Pin * 1000 / (220 * 0.9);
       const brk = U.pick(U.STD.breaker, Math.max(10, 1.3 * I * k));
-      const cab = U.cableFor(1.3 * I * k / 0.91, { pha: '1', ins: 'PVC' });
+      const cab = U.cableFor(brk / U.kTemp('PVC', 40, 30), { pha: '1', ins: 'PVC', min: 2.5 });  // cáp chịu được aptomat, đi riêng
       const S = Math.max(2.5, cab.S);
       const big = Qtk > 4 * 24000;
       return {
