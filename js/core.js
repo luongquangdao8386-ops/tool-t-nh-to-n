@@ -71,11 +71,10 @@
   const modsOf = (g) => MODS.filter((m) => m.group === g.id);
   const pad2 = (n) => String(n).padStart(2, '0');
 
-  // ---------- Lưu trạng thái trên máy ----------
-  const KEY = 'codien-calc.v1';
+  // ---------- Trạng thái nhập liệu: chỉ giữ khi đang dùng, không lưu lại; về trang chủ là trở về mặc định ----------
   let store = {};
-  try { store = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { store = {}; }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* bỏ qua */ } }
+  function save() { /* không lưu */ }
+  function resetAll() { store = {}; }
 
   function stateOf(m) {
     if (!store[m.id]) store[m.id] = {};
@@ -92,7 +91,6 @@
   }
   const visible = (inp, v) => !inp.show || inp.show(v);
   const optsOf = (inp, v) => (typeof inp.opts === 'function' ? inp.opts(v) : inp.opts);
-  const lastMod = () => MODS.find((m) => m.id === store.$last) || null;
 
   // ---------- Biểu tượng (nét 1,7 px, theo bản thiết kế) ----------
   const P = {
@@ -140,7 +138,7 @@
     return `<header class="topbar"><div class="top-inner">
       <button type="button" class="icon-button mobile-menu" data-menu aria-label="Mở menu danh mục" aria-expanded="false">${icon('menu')}</button>
       ${BRAND}
-      <nav class="top-nav" aria-label="Điều hướng chính"><a class="top-link ${view === 'home' ? 'active' : ''}" href="#tong-quan">${icon('grid')}Tổng quan</a><button type="button" class="top-link" data-menu>${icon('list')}Danh mục</button></nav>
+      <nav class="top-nav" aria-label="Điều hướng chính"><a class="top-link ${view === 'home' ? 'active' : ''}" href="#tong-quan">${icon('grid')}Tổng quan</a><button type="button" class="top-link" data-menu>${icon('list')}Danh mục</button><a class="top-link ${view === 'verify' ? 'active' : ''}" href="#kiem-chung">${icon('shield')}Kiểm chứng</a></nav>
       <div class="top-meta"><span class="factory-tag">${icon('factory')}Công cụ kỹ thuật nhà máy</span><span class="pill-badge"><i class="pill-dot"></i>${MODS.length} bảng tính</span></div>
     </div></header>`;
   }
@@ -149,28 +147,20 @@
     const cg = current ? current.group : null;
     return `<aside class="sidebar" aria-label="Nhóm bảng tính"><p class="side-eyebrow">KHÔNG GIAN KỸ THUẬT</p>
       <a href="#tong-quan" class="side-link ${view === 'home' ? 'active' : ''}">${icon('grid')}Tổng quan</a>
+      <a href="#kiem-chung" class="side-link ${view === 'verify' ? 'active' : ''}">${icon('shield')}Kiểm chứng</a>
       <div class="side-separator"></div><p class="side-caption">DANH MỤC BẢNG TÍNH</p>
       ${GROUPS.map((g) => `<a class="side-link ${view === 'calc' && g.id === cg ? 'active' : ''}" href="#nhom-${g.id}">${icon(g.icon)}${esc(g.name)}<span class="count">${pad2(modsOf(g).length)}</span></a>`).join('')}
       ${view === 'calc' && current ? `<a href="#${current.id}" class="side-current"><span class="code-tag">${esc(current.code)}</span><span><b>${esc(current.title)}</b></span></a>` : ''}
       <div class="side-bottom">${PAPER}<strong>Tính đúng. Chọn an toàn.</strong><p>Đồng hành cùng vận hành<br>nhà máy giấy bao bì.</p></div></aside>`;
   }
 
-  function bottomNav() {
-    const m = current || lastMod() || MODS[0];
-    return `<nav class="mobile-bottom" aria-label="Điều hướng điện thoại">
-      <a href="#tong-quan" class="bottom-item ${view === 'home' ? 'active' : ''}">${icon('grid')}Tổng quan</a>
-      <button type="button" class="bottom-item" data-menu>${icon('list')}Danh mục</button>
-      <a href="#${m.id}" class="bottom-item ${view === 'calc' ? 'active' : ''}">${icon('calc')}Bảng tính ${esc(m.code)}</a></nav>`;
-  }
-
   function footer(calc) {
-    return `<footer class="page-footer ${calc ? 'calc-page-footer' : ''}"><span>${icon('factory')}Dành cho nhà máy giấy bao bì</span><span>Tính sơ bộ · đối chiếu catalogue khi đặt hàng</span></footer>`;
+    return `<footer class="page-footer ${calc ? 'calc-page-footer' : ''}"><span>${icon('factory')}Dành cho nhà máy giấy bao bì</span><span>Công cụ hỗ trợ tính toán · thiết kế chính thức do kỹ sư có thẩm quyền duyệt</span></footer>`;
   }
 
   // ---------- Trang tổng quan ----------
   function toolCard(m) {
-    const featured = store.$last === m.id;
-    return `<a class="tool-card ${featured ? 'featured' : ''}" href="#${m.id}" data-search="${esc(normalize(m.code + ' ' + m.title + ' ' + (m.short || '') + ' ' + m.desc))}"><span class="tool-info"><span class="tool-topline"><span class="code-tag">${esc(m.code)}${featured ? '<span class="tiny-feature">· VỪA MỞ</span>' : ''}</span>${icon('arrow')}</span><span class="tool-name">${esc(m.title)}</span><span class="tool-desc">${esc(m.short || m.desc)}</span></span></a>`;
+    return `<a class="tool-card" href="#${m.id}" data-search="${esc(normalize(m.code + ' ' + m.title + ' ' + (m.short || '') + ' ' + m.desc))}"><span class="tool-info"><span class="tool-topline"><span class="code-tag">${esc(m.code)}</span>${icon('arrow')}</span><span class="tool-name">${esc(m.title)}</span><span class="tool-desc">${esc(m.short || m.desc)}</span></span></a>`;
   }
 
   function homeView() {
@@ -178,6 +168,7 @@
       <div class="mobile-summary"><strong>${MODS.length}</strong> bảng tính<span class="dot"></span><strong>${pad2(GROUPS.length)}</strong> nhóm chuyên môn</div></div>
       <div class="overview-stats"><div class="stat"><b>${MODS.length}<span>.</span></b><span>Bảng tính</span></div><div class="stat"><b>${pad2(GROUPS.length)}<span>.</span></b><span>Nhóm chuyên môn</span></div></div></div>
       <div class="search-area"><label class="search-box">${icon('search')}<input type="search" id="home-search" placeholder="Tìm bảng tính theo tên hoặc mã..." aria-label="Tìm bảng tính theo tên hoặc mã" autocomplete="off"><span class="key-hint">/</span></label><span class="search-count" id="search-count">${MODS.length} bảng tính</span></div>
+      <a class="verify-banner" href="#kiem-chung"><span class="vb-icon">${icon('shield')}</span><span class="vb-text"><strong>Kiểm chứng tính toán</strong><span>Mỗi bảng ghi rõ tiêu chuẩn, giả thiết và cách tự kiểm. Trang Kiểm chứng đối chiếu bảng tra và công thức với số liệu chuẩn.</span></span>${icon('arrow')}</a>
       <div class="groups-grid">${GROUPS.map((g) => `<section class="group" id="nhom-${g.id}" aria-labelledby="title-${g.id}"><div class="group-heading"><span class="group-icon">${icon(g.icon)}</span><h2 id="title-${g.id}">${esc(g.name)}</h2><span class="group-count">${pad2(modsOf(g).length)}</span></div><div class="tool-list">${modsOf(g).map(toolCard).join('')}</div></section>`).join('')}</div>
       <p class="empty-state" id="empty-state" hidden>Chưa tìm thấy bảng tính phù hợp.<br>Thử tìm bằng tên hoặc mã khác.</p>${footer(false)}</main>`;
   }
@@ -213,8 +204,8 @@
     } else {
       h += '<div style="height:22px"></div>';
     }
-    h += `<div class="calc-grid"><div class="calc-left"><section class="panel input-panel" aria-labelledby="input-title"><div class="panel-head"><span class="section-symbol">${icon('sliders')}</span><div><h2 id="input-title">Thông số đầu vào</h2><p id="in-count">${nIn} thông số · lưu trên máy này</p></div><span class="section-num">01</span></div>
-        <form class="input-body" id="calc-form" novalidate><div class="form-grid" id="fields">${fieldsHtml(m, v)}</div><div class="input-hint">${icon('info')}<span>Số thập phân dùng dấu phẩy hoặc dấu chấm, ví dụ 0,85. Kết quả tính lại ngay khi đổi thông số.</span></div></form></section>
+    h += `<div class="calc-grid"><div class="calc-left"><section class="panel input-panel" aria-labelledby="input-title"><div class="panel-head"><span class="section-symbol">${icon('sliders')}</span><div><h2 id="input-title">Thông số đầu vào</h2><p id="in-count">${nIn} thông số</p></div><span class="section-num">01</span></div>
+        <form class="input-body" id="calc-form" novalidate><div class="form-grid" id="fields">${fieldsHtml(m, v)}</div><div class="input-hint">${icon('info')}<span>Số thập phân dùng dấu phẩy hoặc dấu chấm, ví dụ 0,85. Kết quả tính lại ngay khi đổi thông số. Về trang chủ thì mọi bảng trở về số mặc định.</span></div></form></section>
         <p class="left-note">${icon('shield')}<span>Đối chiếu điều kiện lắp đặt thực tế<br>trước khi lựa chọn dây và thiết bị bảo vệ.</span></p></div>
       <div class="calc-right"><section class="panel result-panel" aria-labelledby="result-title"><div class="panel-head"><span class="section-symbol">${icon('calc')}</span><h2 id="result-title">Kết quả</h2><span class="live-caption">Tính theo thông số nhập</span></div><div class="result-body" id="result" aria-live="polite"></div></section></div></div>${footer(true)}</main>`;
     return h;
@@ -277,7 +268,7 @@
       if (t.tagName === 'SELECT') {
         fields.innerHTML = fieldsHtml(m, rawValues(m));
         const again = document.getElementById(t.id); if (again) again.focus();
-        $('#in-count').textContent = `${m.inputs.filter((i) => visible(i, rawValues(m))).length} thông số · lưu trên máy này`;
+        $('#in-count').textContent = `${m.inputs.filter((i) => visible(i, rawValues(m))).length} thông số`;
       }
       renderResult(m);
     });
@@ -298,6 +289,11 @@
     const t = c[1], i = t.indexOf(': ');
     if (i > 0 && i < 60) return [t.slice(0, i), t.slice(i + 2)];
     return [t, ''];
+  }
+
+  function basisHtml(b) {
+    const sec = (t, list) => (list && list.length ? `<h4>${t}</h4><ul>${list.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '');
+    return `<details class="basis-box"><summary>${icon('shield')}<span>Cơ sở tính toán &amp; cách kiểm chứng</span>${icon('down')}</summary><div class="basis-body">${sec('Tiêu chuẩn, công thức', b.std)}${sec('Giả thiết', b.assume)}${sec('Cách tự kiểm', b.verify)}<a class="basis-link" href="#kiem-chung">Mở trang Kiểm chứng ${icon('arrow')}</a></div></details>`;
   }
 
   let lastText = '';
@@ -346,8 +342,9 @@
     if (r.notes && r.notes.length) {
       h += `<div class="notes-box"><h3>${icon('info')}Ghi chú kỹ thuật</h3><ul>${r.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
     }
+    if (m.basis) h += basisHtml(m.basis);
     h += actions(true);
-    h += `<p class="result-note">${icon('info')}<span>Kết quả tính sơ bộ theo công thức và bảng tra phổ biến.<br>Đối chiếu catalogue nhà sản xuất và điều kiện lắp đặt khi đặt hàng.</span></p>`;
+    h += `<p class="result-note">${icon('info')}<span>Công cụ hỗ trợ tính toán theo tiêu chuẩn ghi ở mục Cơ sở tính toán. Thiết kế chính thức phải được kỹ sư có thẩm quyền kiểm tra và đối chiếu catalogue thiết bị.</span></p>`;
     box.innerHTML = h;
 
     // Bản chữ để sao chép (dán vào Zalo, email, báo cáo)
@@ -398,7 +395,7 @@
         const cur = current && current.id === m.id;
         return `<a class="drawer-item ${cur ? 'current' : ''}" href="#${m.id}" data-close data-search="${esc(normalize(m.code + ' ' + m.title))}" ${cur ? 'aria-current="page"' : ''}><span class="code-tag">${esc(m.code)}</span><span>${esc(m.title)}</span>${cur ? icon('chevron') : ''}</a>`;
       }).join('')}</div></details>${i < GROUPS.length - 1 ? '<hr class="drawer-separator">' : ''}`).join('')}<p id="menu-empty" class="empty-state" hidden>Không có bảng tính phù hợp.</p></nav>
-      <div class="drawer-footer"><a class="drawer-home" href="#tong-quan" data-close>${icon('grid')}Về trang tổng quan${icon('arrow')}</a><p>Tính đúng. Chọn an toàn.</p></div></aside>`;
+      <div class="drawer-footer"><a class="drawer-home" href="#kiem-chung" data-close>${icon('shield')}Kiểm chứng tính toán${icon('arrow')}</a><a class="drawer-home" href="#tong-quan" data-close>${icon('grid')}Về trang tổng quan${icon('arrow')}</a><p>Tính đúng. Chọn an toàn.</p></div></aside>`;
     ov.hidden = false;
     document.body.classList.add('menu-open');
     document.querySelectorAll('[data-menu]').forEach((e) => e.setAttribute('aria-expanded', 'true'));
@@ -429,19 +426,64 @@
     if (restore && prevFocus && prevFocus.isConnected) prevFocus.focus();
   }
 
+  // ---------- Kiểm chứng: chạy các hàm tính với ca có đáp số độc lập ----------
+  const BENCH = [];
+  const AUDIT = [];
+  function calcWith(id, over = {}, k) {
+    const m = MODS.find((x) => x.id === id);
+    if (!m) throw new Error('Không có bảng ' + id);
+    const v = {};
+    for (const inp of m.inputs) {
+      const raw = over[inp.id] !== undefined ? over[inp.id] : inp.value;
+      v[inp.id] = inp.type === 'sel' ? String(raw) : U.num(raw);
+    }
+    const r = m.calc(v, k === undefined ? (m.sf == null ? 1 : m.sf) : k, U);
+    if (r.error) throw new Error(r.error);
+    return r;
+  }
+  function runBench(b) {
+    try {
+      const got = b.run();
+      const tol = b.tol === undefined ? 0.005 : b.tol;
+      const ok = typeof b.expect === 'number' ? Math.abs(got - b.expect) <= Math.abs(b.expect) * tol + 1e-9 : got === b.expect;
+      return { got, ok, dev: typeof b.expect === 'number' && b.expect !== 0 ? (got - b.expect) / b.expect * 100 : 0 };
+    } catch (e) { return { got: NaN, ok: false, err: e.message || String(e) }; }
+  }
+  function verifyView() {
+    const res = BENCH.map((b) => ({ b, r: runBench(b) }));
+    const pass = res.filter((x) => x.r.ok).length;
+    const ext = BENCH.filter((b) => b.ext).length;
+    const kinds = [['table', 'Bảng tra tiêu chuẩn'], ['factor', 'Hệ số hiệu chỉnh'], ['formula', 'Công thức – tính tay'], ['select', 'Kết quả chọn thiết bị']];
+    const fmtV = (b, x) => (typeof x === 'number' ? (isFinite(x) ? U.f(x, b.digits === undefined ? 2 : b.digits) : '—') : esc(x));
+    const row = ({ b, r }) => `<li class="vrow ${r.ok ? '' : 'fail'}"><div class="vrow-main"><span class="code-tag">${esc(b.code)}</span><strong>${esc(b.name)}</strong><span class="badge ${r.ok ? '' : 'fail'}">${r.ok ? 'Khớp' : 'Lệch'}</span></div>
+      <div class="vrow-nums"><span>Chuẩn: <b class="num">${fmtV(b, b.expect)}${b.unit ? ' ' + esc(b.unit) : ''}</b></span><span>Tool: <b class="num">${fmtV(b, r.got)}${b.unit ? ' ' + esc(b.unit) : ''}</b></span>${typeof b.expect === 'number' && r.ok !== undefined && !r.err ? `<span>Lệch: <b class="num">${U.f(r.dev, 2)} %</b></span>` : ''}</div>
+      <p class="vrow-src">${b.ext ? '<span class="ext">Đã đối chiếu nguồn ngoài</span> ' : ''}${esc(b.src)}${r.err ? ' · Lỗi: ' + esc(r.err) : ''}</p></li>`;
+    return `<main id="main" class="main verify-main"><div class="breadcrumb"><button type="button" data-home aria-label="Về trang tổng quan">${icon('left')}</button><a href="#tong-quan">Tổng quan</a>${icon('chevron')}<span>Kiểm chứng</span></div>
+      <div class="calc-heading"><div class="eyebrow"><span class="calc-code">KC</span>Kiểm chứng tính toán</div><h1>Kiểm chứng tính toán</h1><p>Trang này chạy trực tiếp các hàm tính của tool với những ca có đáp số độc lập: số trong bảng tiêu chuẩn, phép tính tay theo công thức gốc, quy định. Ca nào lệch quá dung sai sẽ hiện "Lệch".</p></div>
+      <div class="verify-summary"><div class="vs-big ${pass === res.length ? '' : 'fail'}"><b class="num">${pass}/${res.length}</b><span>ca khớp</span></div><div class="vs-text"><p><strong>${ext}</strong> ca đã được đối chiếu với nguồn bên ngoài trong lần rà soát gần nhất (bản chép bảng IEC, catalogue hãng, văn bản quy định). Các ca còn lại so với giá trị trong bảng tiêu chuẩn và tính tay.</p><p>Khớp ở đây nghĩa là tool tính đúng theo tiêu chuẩn đã ghi. Nó không thay cho việc kỹ sư kiểm tra điều kiện thực tế và catalogue thiết bị.</p></div></div>
+      <section class="verify-how"><h2>Ba bước để tự kiểm một kết quả</h2><ol>
+        <li><strong>Tra bảng.</strong> Ở mỗi bảng tính, dòng "Iz một sợi (bảng)" hoặc "Dòng bảng" là số tra trực tiếp. So với catalogue hãng cáp, thanh cái (Cadivi, LS Vina, Rittal…) cùng cách lắp và nhiệt độ chuẩn.</li>
+        <li><strong>Tính tay.</strong> Mở "Diễn giải công thức", bấm máy tính lại từng dòng. Mục "Cơ sở tính toán &amp; cách kiểm chứng" ghi rõ tiêu chuẩn, điều khoản và giả thiết.</li>
+        <li><strong>Đối chiếu thực tế.</strong> So với nhãn thiết bị, phần mềm chọn thiết bị của hãng, số đo tại hiện trường; thiết kế chính thức do kỹ sư có thẩm quyền duyệt.</li></ol></section>
+      ${kinds.map(([kd, name]) => { const list = res.filter((x) => x.b.kind === kd); return list.length ? `<section class="verify-group"><h2>${name} <small>${list.filter((x) => x.r.ok).length}/${list.length}</small></h2><ul class="vlist">${list.map(row).join('')}</ul></section>` : ''; }).join('')}
+      ${AUDIT.length ? `<section class="verify-group audit"><h2>Lỗi đã phát hiện và sửa</h2><ul class="audit-list">${AUDIT.map((a) => `<li><span class="code-tag">${esc(a[0])}</span><div><strong>${esc(a[1])}</strong><p>${esc(a[2])}</p></div></li>`).join('')}</ul></section>` : ''}
+      ${footer(true)}</main>`;
+  }
+
   // ---------- Điều hướng ----------
   function render() {
     closeMenu(false);
     const id = (location.hash || '').replace('#', '');
     const m = MODS.find((x) => x.id === id);
-    view = m ? 'calc' : 'home';
+    view = m ? 'calc' : id === 'kiem-chung' ? 'verify' : 'home';
     current = m || null;
-    if (m) { store.$last = m.id; save(); }
-    $('#app').innerHTML = header() + `<div class="app-layout">${sidebar()}${m ? calcView(m) : homeView()}</div>` + bottomNav();
+    if (view === 'home') resetAll();
+    $('#app').innerHTML = header() + `<div class="app-layout">${sidebar()}${m ? calcView(m) : view === 'verify' ? verifyView() : homeView()}</div>`;
     document.querySelectorAll('[data-menu]').forEach((e) => e.addEventListener('click', openMenu));
     document.querySelectorAll('[data-home]').forEach((e) => e.addEventListener('click', () => { location.hash = 'tong-quan'; }));
-    document.title = m ? `${m.code} ${m.title} · Tính toán cơ điện` : 'Tính toán cơ điện';
+    document.title = m ? `${m.code} ${m.title} · Tính toán cơ điện` : view === 'verify' ? 'Kiểm chứng · Tính toán cơ điện' : 'Tính toán cơ điện';
     if (m) { bindCalc(m); renderResult(m); window.scrollTo(0, 0); }
+    else if (view === 'verify') { window.scrollTo(0, 0); }
     else {
       bindHome();
       const g = id.startsWith('nhom-') ? document.getElementById(id) : null;
@@ -472,8 +514,11 @@
   }
 
   window.CD = {
-    U, GROUPS, SF_PRESETS,
+    U, GROUPS, SF_PRESETS, MODS,
     register(m) { MODS.push(m); },
+    bench(list) { BENCH.push(...list); },
+    audit(list) { AUDIT.push(...list); },
+    benches: BENCH, runBench, calcWith,
     start
   };
 })();
